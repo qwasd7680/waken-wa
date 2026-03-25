@@ -1,6 +1,5 @@
 'use client'
 
-import Image from 'next/image'
 import useSWR from 'swr'
 import { Activity } from '@/lib/types'
 
@@ -35,13 +34,13 @@ export function UserProfile({
         {/* Avatar */}
         <div className="relative flex-shrink-0">
           <div className="w-14 h-14 rounded-full overflow-hidden border border-border">
-            <Image
+            <img
               src={avatarUrl}
               alt={name}
               width={56}
               height={56}
               className="w-full h-full object-cover"
-              priority
+              loading="eager"
             />
           </div>
           <div

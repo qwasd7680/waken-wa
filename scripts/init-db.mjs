@@ -67,6 +67,5 @@ console.log(`[init-db] provider=${provider} schema=${schemaRel}`)
 
 run(`npx prisma generate --schema ${schemaRel}`)
 run(`npx prisma db push --schema ${schemaRel}`)
-run(`npx tsx prisma/seed-if-needed.ts`)
 
 console.log('[init-db] done')

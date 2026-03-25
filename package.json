@@ -7,17 +7,12 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint .",
-    "postinstall": "prisma generate && prisma db push && tsx prisma/seed-if-needed.ts",
+    "postinstall": "prisma generate && prisma db push",
     "db:generate": "prisma generate",
     "db:generate:sqlite": "prisma generate --schema prisma/schema.sqlite.prisma",
     "db:push": "prisma db push",
     "db:push:sqlite": "prisma db push --schema prisma/schema.sqlite.prisma",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:seed:if-needed": "tsx prisma/seed-if-needed.ts",
     "db:init": "node scripts/init-db.mjs"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

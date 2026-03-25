@@ -1,23 +1,23 @@
-'use client'
-
-import { useEffect, useState } from 'react'
 import { UserProfile } from '@/components/user-profile'
 import { CurrentStatus } from '@/components/current-status'
 import { ActivityTimeline } from '@/components/activity-timeline'
+import prisma from '@/lib/prisma'
+import { redirect } from 'next/navigation'
 
-export default function Home() {
-  const [mounted, setMounted] = useState(false)
+export default async function Home() {
+  const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
+  if (!config) {
+    redirect('/admin/setup')
+  }
 
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  if (!mounted) return null
-
-  const userName = process.env.NEXT_PUBLIC_USER_NAME || 'Koi'
-  const userBio = process.env.NEXT_PUBLIC_USER_BIO || 'Code with patience and optimism.'
-  const avatarUrl = process.env.NEXT_PUBLIC_AVATAR_URL || '/avatar.jpg'
-  const userNote = process.env.NEXT_PUBLIC_USER_NOTE || 'Writing code, sipping coffee, thinking about the universe...'
+  const userName = config.userName
+  const userBio = config.userBio
+  const avatarUrl = config.avatarUrl
+  const userNote = config.userNote
+  const currentlyText = config.currentlyText
+  const earlierText = config.earlierText
+  const updatesText = config.updatesText
+  const adminText = config.adminText
 
   return (
     <>
@@ -44,7 +44,7 @@ export default function Home() {
           {/* Current Activity Detail */}
           <section>
             <h2 className="text-xs text-muted-foreground uppercase tracking-widest mb-6">
-              currently
+              {currentlyText}
             </h2>
             <CurrentStatus />
           </section>
@@ -52,7 +52,7 @@ export default function Home() {
           {/* Timeline */}
           <section>
             <h2 className="text-xs text-muted-foreground uppercase tracking-widest mb-6">
-              earlier
+              {earlierText}
             </h2>
             <ActivityTimeline />
           </section>
@@ -62,9 +62,9 @@ export default function Home() {
         <footer className="border-t border-border/50 mt-16 backdrop-blur-sm">
           <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <p>updates every 30 seconds</p>
+              <p>{updatesText}</p>
               <a href="/admin" className="hover:text-foreground transition-colors">
-                admin
+                {adminText}
               </a>
             </div>
           </div>

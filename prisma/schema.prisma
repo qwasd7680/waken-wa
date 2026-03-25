@@ -40,3 +40,19 @@ model ActivityLog {
 
   @@map("activity_logs")
 }
+
+model SiteConfig {
+  id            Int      @id @default(1)
+  userName      String   @map("user_name") @db.VarChar(120)
+  userBio       String   @map("user_bio")
+  avatarUrl     String   @map("avatar_url")
+  userNote      String   @map("user_note")
+  currentlyText String   @map("currently_text") @db.VarChar(60) @default("currently")
+  earlierText   String   @map("earlier_text") @db.VarChar(60) @default("earlier")
+  updatesText   String   @map("updates_text") @db.VarChar(120) @default("updates every 30 seconds")
+  adminText     String   @map("admin_text") @db.VarChar(30) @default("admin")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("site_config")
+}

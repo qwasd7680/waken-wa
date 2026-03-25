@@ -19,12 +19,3 @@ export interface PaginatedResponse<T> {
     total: number
   }
 }
-
-export interface StatsData {
-  totalActivities: number
-  todayActivities: number
-  totalDevices: number
-  activeTokens: number
-  recentDevices: Array<{ device: string; last_used: Date; count: string }>
-  topProcesses: Array<{ process_name: string; count: string }>
-}
