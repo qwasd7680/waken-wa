@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { hashPassword } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
   try {
     const hasAdmin = (await prisma.adminUser.count()) > 0
+    if (hasAdmin) {
+      const session = await getSession()
+      if (!session) {
+        return NextResponse.json({ success: false, error: '未授权' }, { status: 401 })
+      }
+    }
 
     const {
       username,

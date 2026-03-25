@@ -7,6 +7,7 @@ import {
   LayoutDashboard, 
   List, 
   Key, 
+  Settings,
   LogOut,
   Clock,
   Home
@@ -16,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ActivityList } from './activity-list'
 import { TokenManager } from './token-manager'
 import { AddActivityForm } from './add-activity-form'
+import { WebSettings } from './web-settings'
 
 interface DashboardProps {
   username: string
@@ -76,6 +78,10 @@ export function AdminDashboard({ username }: DashboardProps) {
               <Key className="h-4 w-4" />
               API Token
             </TabsTrigger>
+            <TabsTrigger value="settings" className="gap-2">
+              <Settings className="h-4 w-4" />
+              设置
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -94,6 +100,10 @@ export function AdminDashboard({ username }: DashboardProps) {
 
           <TabsContent value="tokens">
             <TokenManager />
+          </TabsContent>
+
+          <TabsContent value="settings">
+            <WebSettings />
           </TabsContent>
         </Tabs>
       </main>

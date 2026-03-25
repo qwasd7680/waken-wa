@@ -87,3 +87,24 @@ await fetch('http://localhost:3000/api/activity', {
 2. 是否带了 `Bearer ` 前缀
 3. `device` 与 `process_name` 是否存在
 4. Token 是否处于启用状态（后台可切换）
+
+## 7. 一键复制接入配置（Base64）
+
+后台 `设置` 页面提供 **一键复制接入配置（Base64）** 按钮。
+
+复制内容包含：
+
+- 网页配置（名称、简介、头像、历史窗口、文案等）
+- Token 列表（含名称、token、启用状态）
+- 上报地址（`reportEndpoint`）
+
+可在其他设备中把 Base64 解码为 JSON 使用。
+
+示例（Node.js 解码）：
+
+```ts
+const decoded = Buffer.from(base64Text, 'base64').toString('utf8')
+const config = JSON.parse(decoded)
+console.log(config.token.reportEndpoint)
+console.log(config.token.items[0]?.token)
+```
