@@ -9,19 +9,41 @@ function toSseEvent(event: string, data: unknown): string {
 export async function GET() {
   const encoder = new TextEncoder()
   let timer: ReturnType<typeof setInterval> | null = null
+  let closed = false
+
+  const cleanup = () => {
+    if (timer) {
+      clearInterval(timer)
+      timer = null
+    }
+    closed = true
+  }
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
+      const safeEnqueue = (chunk: Uint8Array): boolean => {
+        if (closed) return false
+        try {
+          controller.enqueue(chunk)
+          return true
+        } catch {
+          cleanup()
+          return false
+        }
+      }
+
       const push = async () => {
+        if (closed) return
         try {
           const payload = await getActivityFeedData(50)
-          controller.enqueue(
+          safeEnqueue(
             encoder.encode(
               toSseEvent('activity', { success: true, data: payload })
             )
           )
         } catch (error) {
-          controller.enqueue(
+          if (closed) return
+          safeEnqueue(
             encoder.encode(
               toSseEvent('error', {
                 success: false,
@@ -39,7 +61,7 @@ export async function GET() {
       }, 5000)
     },
     cancel() {
-      if (timer) clearInterval(timer)
+      cleanup()
     },
   })
 
