@@ -2,8 +2,26 @@ import { PrismaClient } from '@prisma/client'
 import { runSeed } from './seed'
 
 async function main() {
-  if (!process.env.DATABASE_URL?.trim()) {
-    console.warn('[seed-if-needed] DATABASE_URL not set, skip')
+  const provider = (process.env.DATABASE_PROVIDER || 'postgresql').toLowerCase()
+  const hasPostgresUrl = !!process.env.POSTGRES_URL?.trim()
+  const hasDatabaseUrl = !!process.env.DATABASE_URL?.trim()
+
+  if (provider === 'sqlite') {
+    if (!hasDatabaseUrl) {
+      console.warn('[seed-if-needed] DATABASE_URL not set for sqlite, skip')
+      process.exit(0)
+    }
+  } else {
+    if (!hasPostgresUrl) {
+      console.warn('[seed-if-needed] POSTGRES_URL not set for postgresql, skip')
+      process.exit(0)
+    }
+  }
+
+  // Prisma reads datasource url from env inside the selected schema.
+  // We only use this check to avoid confusing errors when connection env vars are missing.
+  if (!(hasPostgresUrl || hasDatabaseUrl)) {
+    console.warn('[seed-if-needed] No database URL env vars set, skip')
     process.exit(0)
   }
 

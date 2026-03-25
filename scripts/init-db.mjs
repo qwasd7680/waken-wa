@@ -9,10 +9,23 @@ const provider = (process.env.DATABASE_PROVIDER || 'postgresql').toLowerCase()
 const schemaRel =
   provider === 'sqlite' ? 'prisma/schema.sqlite.prisma' : 'prisma/schema.prisma'
 
-if (!process.env.DATABASE_URL?.trim()) {
-  console.error('[init-db] Set DATABASE_URL (e.g. postgresql://... or file:./dev.db)')
-  process.exit(1)
+const hasPostgresUrl = !!process.env.POSTGRES_URL?.trim()
+const hasDatabaseUrl = !!process.env.DATABASE_URL?.trim()
+
+if (provider === 'sqlite') {
+  if (!hasDatabaseUrl) {
+    console.error('[init-db] Set DATABASE_URL for sqlite (e.g. file:./dev.db)')
+    process.exit(1)
+  }
+} else {
+  if (!hasPostgresUrl) {
+    console.error('[init-db] Set POSTGRES_URL for postgresql (e.g. postgres://... )')
+    process.exit(1)
+  }
 }
+
+// Note: Prisma reads datasource url from env inside the selected schema.
+// We only validate presence here to fail fast with a clear error message.
 
 function run(cmd) {
   execSync(cmd, { stdio: 'inherit', cwd: root, env: process.env, shell: true })
