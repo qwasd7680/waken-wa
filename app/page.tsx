@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { verifySiteLockSession } from '@/lib/auth'
 import { SiteLockForm } from '@/components/site-lock-form'
+import { getThemePresetCss } from '@/lib/theme-css'
 
 export default async function Home() {
   const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
@@ -30,9 +31,18 @@ export default async function Home() {
   const earlierText = config.earlierText
   const updatesText = config.updatesText
   const adminText = config.adminText
+  const themePresetCss = getThemePresetCss(config.themePreset)
+  const customCss = String(config.customCss ?? '')
+  const themeCss = `${themePresetCss}\n${customCss}`.trim()
 
   return (
     <>
+      {themeCss && (
+        <style
+          id="site-theme-override"
+          dangerouslySetInnerHTML={{ __html: themeCss }}
+        />
+      )}
       {/* Animated Background */}
       <div className="animated-bg">
         <div className="floating-orb floating-orb-1" />

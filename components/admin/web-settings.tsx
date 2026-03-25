@@ -10,6 +10,8 @@ interface SiteConfig {
   userBio: string
   avatarUrl: string
   userNote: string
+  themePreset: string
+  customCss: string
   historyWindowMinutes: number
   historyWindowHintText: string
   appMessageRules: Array<{ match: string; text: string }>
@@ -41,6 +43,8 @@ export function WebSettings() {
     userBio: '',
     avatarUrl: '',
     userNote: '',
+    themePreset: 'basic',
+    customCss: '',
     historyWindowMinutes: 120,
     historyWindowHintText: '历史窗口：最近 2 小时（可在设置中调整）',
     appMessageRules: [],
@@ -64,6 +68,8 @@ export function WebSettings() {
             userBio: data.data.userBio ?? '',
             avatarUrl: data.data.avatarUrl ?? '',
             userNote: data.data.userNote ?? '',
+            themePreset: data.data.themePreset ?? 'basic',
+            customCss: data.data.customCss ?? '',
             historyWindowMinutes: Number(data.data.historyWindowMinutes ?? 120),
             historyWindowHintText:
               data.data.historyWindowHintText ?? '历史窗口：最近 2 小时（可在设置中调整）',
@@ -205,6 +211,34 @@ export function WebSettings() {
       <div className="space-y-2">
         <Label>首页备注</Label>
         <Input value={form.userNote} onChange={(e) => patch('userNote', e.target.value)} />
+      </div>
+
+      <div className="space-y-2">
+        <Label>主题预设</Label>
+        <select
+          value={form.themePreset}
+          onChange={(e) => patch('themePreset', e.target.value)}
+          className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+        >
+          <option value="basic">Basic（默认）</option>
+          <option value="midnight">Midnight（深夜蓝）</option>
+          <option value="forest">Forest（森林绿）</option>
+          <option value="sakura">Sakura（樱花粉）</option>
+        </select>
+      </div>
+
+      <div className="space-y-2">
+        <Label>自定义 CSS 覆写（主界面）</Label>
+        <textarea
+          rows={8}
+          value={form.customCss}
+          onChange={(e) => patch('customCss', e.target.value)}
+          className="w-full px-3 py-2 border rounded-md bg-background text-sm font-mono"
+          placeholder="示例：:root { --primary: oklch(0.5 0.2 30); }"
+        />
+        <p className="text-xs text-muted-foreground">
+          保存后会注入主页并覆盖默认样式，可用于快速主题定制。
+        </p>
       </div>
 
       <div className="space-y-2">

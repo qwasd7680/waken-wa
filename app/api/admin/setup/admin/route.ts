@@ -3,6 +3,7 @@ import { hashPassword } from '@/lib/auth'
 import { getSession } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+import { normalizeCustomCss } from '@/lib/theme-css'
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,6 +22,8 @@ export async function POST(request: NextRequest) {
       userBio,
       avatarUrl,
       userNote,
+      themePreset,
+      customCss,
       historyWindowMinutes,
       historyWindowHintText,
       appMessageRules,
@@ -37,6 +40,8 @@ export async function POST(request: NextRequest) {
     const normalizedUserBio = String(userBio ?? '').trim()
     const normalizedAvatarUrl = String(avatarUrl ?? '').trim()
     const normalizedUserNote = String(userNote ?? '').trim()
+    const normalizedThemePreset = String(themePreset ?? 'basic').trim() || 'basic'
+    const normalizedCustomCss = normalizeCustomCss(customCss)
     const parsedWindow = Number(historyWindowMinutes ?? 120)
     const normalizedHistoryWindowMinutes = Number.isFinite(parsedWindow)
       ? Math.min(Math.max(Math.round(parsedWindow), 10), 24 * 60)
@@ -114,6 +119,8 @@ export async function POST(request: NextRequest) {
           userBio: normalizedUserBio,
           avatarUrl: normalizedAvatarUrl,
           userNote: normalizedUserNote,
+          themePreset: normalizedThemePreset,
+          customCss: normalizedCustomCss,
           historyWindowMinutes: normalizedHistoryWindowMinutes,
           historyWindowHintText: normalizedHistoryWindowHintText,
           appMessageRules: normalizedAppMessageRules,
@@ -130,6 +137,8 @@ export async function POST(request: NextRequest) {
           userBio: normalizedUserBio,
           avatarUrl: normalizedAvatarUrl,
           userNote: normalizedUserNote,
+          themePreset: normalizedThemePreset,
+          customCss: normalizedCustomCss,
           historyWindowMinutes: normalizedHistoryWindowMinutes,
           historyWindowHintText: normalizedHistoryWindowHintText,
           appMessageRules: normalizedAppMessageRules,

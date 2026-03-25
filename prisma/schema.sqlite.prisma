@@ -46,6 +46,8 @@ model SiteConfig {
   userBio       String   @map("user_bio")
   avatarUrl     String   @map("avatar_url")
   userNote      String   @map("user_note")
+  themePreset   String   @map("theme_preset") @default("basic")
+  customCss     String?  @map("custom_css")
   historyWindowMinutes Int @map("history_window_minutes") @default(120)
   historyWindowHintText String @map("history_window_hint_text") @default("历史窗口：最近 2 小时（可在设置中调整）")
   appMessageRules Json?  @map("app_message_rules")

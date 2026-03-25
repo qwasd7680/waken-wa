@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+import { normalizeCustomCss } from '@/lib/theme-css'
 
 async function requireAdmin() {
   const session = await getSession()
@@ -42,6 +43,8 @@ export async function PATCH(request: NextRequest) {
     const userBio = String(body.userBio ?? '').trim()
     const avatarUrl = String(body.avatarUrl ?? '').trim()
     const userNote = String(body.userNote ?? '').trim()
+    const themePreset = String(body.themePreset ?? 'basic').trim() || 'basic'
+    const customCss = normalizeCustomCss(body.customCss)
     const currentlyText = String(body.currentlyText ?? '').trim() || 'currently'
     const earlierText = String(body.earlierText ?? '').trim() || 'earlier'
     const updatesText =
@@ -85,6 +88,8 @@ export async function PATCH(request: NextRequest) {
         userBio,
         avatarUrl,
         userNote,
+        themePreset,
+        customCss,
         historyWindowMinutes,
         historyWindowHintText,
         appMessageRules,
@@ -101,6 +106,8 @@ export async function PATCH(request: NextRequest) {
         userBio,
         avatarUrl,
         userNote,
+        themePreset,
+        customCss,
         historyWindowMinutes,
         historyWindowHintText,
         appMessageRules,

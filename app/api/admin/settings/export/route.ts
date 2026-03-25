@@ -51,6 +51,8 @@ export async function GET(request: Request) {
         userBio: siteConfig.userBio,
         avatarUrl: siteConfig.avatarUrl,
         userNote: siteConfig.userNote,
+        themePreset: siteConfig.themePreset,
+        customCss: siteConfig.customCss,
         historyWindowMinutes: siteConfig.historyWindowMinutes,
         historyWindowHintText: siteConfig.historyWindowHintText,
         appMessageRules: siteConfig.appMessageRules,
