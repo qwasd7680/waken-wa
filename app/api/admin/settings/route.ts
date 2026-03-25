@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import bcrypt from 'bcryptjs'
 
 async function requireAdmin() {
   const session = await getSession()
@@ -15,7 +16,14 @@ export async function GET() {
 
   try {
     const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
-    return NextResponse.json({ success: true, data: config })
+    if (!config) {
+      return NextResponse.json({ success: true, data: null })
+    }
+    const safe = {
+      ...config,
+      pageLockPasswordHash: undefined,
+    }
+    return NextResponse.json({ success: true, data: safe })
   } catch (error) {
     console.error('读取站点配置失败:', error)
     return NextResponse.json({ success: false, error: '读取失败' }, { status: 500 })
@@ -39,6 +47,12 @@ export async function PATCH(request: NextRequest) {
     const updatesText =
       String(body.updatesText ?? '').trim() || 'updates every 30 seconds'
     const adminText = String(body.adminText ?? '').trim() || 'admin'
+    const historyWindowHintText =
+      String(body.historyWindowHintText ?? '').trim() ||
+      '历史窗口：最近 2 小时（可在设置中调整）'
+    const pageLockEnabled = Boolean(body.pageLockEnabled)
+    const rawPageLockPassword = String(body.pageLockPassword ?? '')
+    const appMessageRules = Array.isArray(body.appMessageRules) ? body.appMessageRules : []
     const parsedWindow = Number(body.historyWindowMinutes ?? 120)
     const historyWindowMinutes = Number.isFinite(parsedWindow)
       ? Math.min(Math.max(Math.round(parsedWindow), 10), 24 * 60)
@@ -51,6 +65,19 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    const existing = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
+    const pageLockPasswordHash =
+      rawPageLockPassword.trim().length > 0
+        ? await bcrypt.hash(rawPageLockPassword.trim(), 12)
+        : existing?.pageLockPasswordHash ?? null
+
+    if (pageLockEnabled && !pageLockPasswordHash) {
+      return NextResponse.json(
+        { success: false, error: '启用页面锁时请先设置访问密码' },
+        { status: 400 }
+      )
+    }
+
     const config = await (prisma as any).siteConfig.upsert({
       where: { id: 1 },
       update: {
@@ -59,6 +86,10 @@ export async function PATCH(request: NextRequest) {
         avatarUrl,
         userNote,
         historyWindowMinutes,
+        historyWindowHintText,
+        appMessageRules,
+        pageLockEnabled,
+        pageLockPasswordHash,
         currentlyText,
         earlierText,
         updatesText,
@@ -71,6 +102,10 @@ export async function PATCH(request: NextRequest) {
         avatarUrl,
         userNote,
         historyWindowMinutes,
+        historyWindowHintText,
+        appMessageRules,
+        pageLockEnabled,
+        pageLockPasswordHash,
         currentlyText,
         earlierText,
         updatesText,

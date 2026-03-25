@@ -11,34 +11,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 
-type CropRect = {
-  x: number
-  y: number
-  size: number
-}
-
-function clampCropSquare(
-  start: { x: number; y: number },
-  current: { x: number; y: number },
-  maxW: number,
-  maxH: number
-): CropRect {
-  const dx = current.x - start.x
-  const dy = current.y - start.y
-  const dirX = dx >= 0 ? 1 : -1
-  const dirY = dy >= 0 ? 1 : -1
-
-  let size = Math.max(Math.abs(dx), Math.abs(dy))
-  const maxSizeX = dirX > 0 ? maxW - start.x : start.x
-  const maxSizeY = dirY > 0 ? maxH - start.y : start.y
-  size = Math.max(1, Math.min(size, maxSizeX, maxSizeY))
-
-  return {
-    x: dirX > 0 ? start.x : start.x - size,
-    y: dirY > 0 ? start.y : start.y - size,
-    size,
-  }
-}
+const CROP_VIEW_SIZE = 320
+const CROP_FRAME_SIZE = 220
 
 interface SetupInitialConfig {
   userName: string
@@ -75,9 +49,14 @@ export function SetupForm({ needAdminSetup, initialConfig }: SetupFormProps) {
   const [adminText, setAdminText] = useState(initialConfig?.adminText ?? '')
   const [cropSourceUrl, setCropSourceUrl] = useState<string | null>(null)
   const [cropDialogOpen, setCropDialogOpen] = useState(false)
-  const [cropRect, setCropRect] = useState<CropRect | null>(null)
-  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null)
-  const [displaySize, setDisplaySize] = useState({ width: 0, height: 0 })
+  const [cropZoom, setCropZoom] = useState(1)
+  const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 })
+  const [dragStart, setDragStart] = useState<{
+    x: number
+    y: number
+    offsetX: number
+    offsetY: number
+  } | null>(null)
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -95,46 +74,54 @@ export function SetupForm({ needAdminSetup, initialConfig }: SetupFormProps) {
     const image = cropImageRef.current
     if (!image) return
 
-    const width = image.clientWidth
-    const height = image.clientHeight
-    setDisplaySize({ width, height })
     setNaturalSize({ width: image.naturalWidth, height: image.naturalHeight })
-
-    const initialSize = Math.floor(Math.min(width, height) * 0.7)
-    setCropRect({
-      x: Math.floor((width - initialSize) / 2),
-      y: Math.floor((height - initialSize) / 2),
-      size: initialSize,
-    })
+    setCropZoom(1)
+    setCropOffset({ x: 0, y: 0 })
   }
 
-  const getRelativePoint = (
-    e: React.MouseEvent<HTMLDivElement, MouseEvent>
-  ): { x: number; y: number } | null => {
-    const target = e.currentTarget
-    const rect = target.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-    if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null
-    return { x, y }
+  const getBaseScale = () => {
+    if (!naturalSize.width || !naturalSize.height) return 1
+    return Math.max(
+      CROP_FRAME_SIZE / naturalSize.width,
+      CROP_FRAME_SIZE / naturalSize.height
+    )
+  }
+
+  const clampOffset = (x: number, y: number, zoom = cropZoom) => {
+    if (!naturalSize.width || !naturalSize.height) return { x: 0, y: 0 }
+    const totalScale = getBaseScale() * zoom
+    const renderedWidth = naturalSize.width * totalScale
+    const renderedHeight = naturalSize.height * totalScale
+    const maxX = Math.max(0, (renderedWidth - CROP_FRAME_SIZE) / 2)
+    const maxY = Math.max(0, (renderedHeight - CROP_FRAME_SIZE) / 2)
+    return {
+      x: Math.min(maxX, Math.max(-maxX, x)),
+      y: Math.min(maxY, Math.max(-maxY, y)),
+    }
   }
 
   const applyCrop = () => {
-    if (!cropSourceUrl || !cropRect || !cropImageRef.current) {
-      setError('请先选择并框选头像区域')
+    if (!cropSourceUrl || !cropImageRef.current || !naturalSize.width || !naturalSize.height) {
+      setError('请先选择并调整头像区域')
       return
     }
-    if (!displaySize.width || !displaySize.height || !naturalSize.width || !naturalSize.height) {
-      setError('头像尺寸读取失败，请重新选择图片')
-      return
-    }
+    const totalScale = getBaseScale() * cropZoom
+    const imageLeft =
+      CROP_VIEW_SIZE / 2 + cropOffset.x - (naturalSize.width * totalScale) / 2
+    const imageTop =
+      CROP_VIEW_SIZE / 2 + cropOffset.y - (naturalSize.height * totalScale) / 2
+    const frameLeft = (CROP_VIEW_SIZE - CROP_FRAME_SIZE) / 2
+    const frameTop = (CROP_VIEW_SIZE - CROP_FRAME_SIZE) / 2
 
-    const scaleX = naturalSize.width / displaySize.width
-    const scaleY = naturalSize.height / displaySize.height
-    const sx = Math.round(cropRect.x * scaleX)
-    const sy = Math.round(cropRect.y * scaleY)
-    const sw = Math.max(1, Math.round(cropRect.size * scaleX))
-    const sh = Math.max(1, Math.round(cropRect.size * scaleY))
+    let sx = (frameLeft - imageLeft) / totalScale
+    let sy = (frameTop - imageTop) / totalScale
+    let sw = CROP_FRAME_SIZE / totalScale
+    let sh = CROP_FRAME_SIZE / totalScale
+
+    sx = Math.max(0, Math.min(sx, naturalSize.width - sw))
+    sy = Math.max(0, Math.min(sy, naturalSize.height - sh))
+    sw = Math.max(1, Math.min(sw, naturalSize.width))
+    sh = Math.max(1, Math.min(sh, naturalSize.height))
 
     const canvas = document.createElement('canvas')
     canvas.width = 64
@@ -152,7 +139,6 @@ export function SetupForm({ needAdminSetup, initialConfig }: SetupFormProps) {
       URL.revokeObjectURL(cropSourceUrl)
     }
     setCropSourceUrl(null)
-    setCropRect(null)
     setDragStart(null)
   }
 
@@ -331,13 +317,14 @@ export function SetupForm({ needAdminSetup, initialConfig }: SetupFormProps) {
                   const objectUrl = URL.createObjectURL(file)
                   setCropSourceUrl(objectUrl)
                   setCropDialogOpen(true)
-                  setCropRect(null)
+                  setCropZoom(1)
+                  setCropOffset({ x: 0, y: 0 })
                   setDragStart(null)
                 }}
                 className="w-full text-xs text-muted-foreground file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:border-border file:bg-muted/50 file:text-foreground hover:file:bg-muted file:cursor-pointer"
               />
               <p className="text-[11px] text-muted-foreground">
-                上传后请拖拽框选裁剪区域，保存为 64x64 正方形（PNG DataURL）
+                上传后在弹窗中拖动和缩放图片，确认后保存为 64x64 正方形（PNG DataURL）
               </p>
               {avatarUrl && (
                 <div className="flex items-center gap-3 rounded-md border border-border/60 bg-background/60 p-3">
@@ -442,44 +429,79 @@ export function SetupForm({ needAdminSetup, initialConfig }: SetupFormProps) {
             <DialogDescription>请在图片上拖拽框选区域，确认后将生成 64x64 头像。</DialogDescription>
           </DialogHeader>
           {cropSourceUrl && (
-            <div
-              className="relative w-full border border-border rounded-md overflow-hidden cursor-crosshair bg-black/20"
-              onMouseDown={(e) => {
-                const p = getRelativePoint(e)
-                if (!p) return
-                setDragStart(p)
-                setCropRect({ x: p.x, y: p.y, size: 1 })
-              }}
-              onMouseMove={(e) => {
-                if (!dragStart) return
-                const p = getRelativePoint(e)
-                if (!p) return
-                setCropRect(
-                  clampCropSquare(dragStart, p, displaySize.width, displaySize.height)
-                )
-              }}
-              onMouseUp={() => setDragStart(null)}
-              onMouseLeave={() => setDragStart(null)}
-            >
+            <div className="space-y-3">
+              <div
+                className="relative mx-auto border border-border rounded-md overflow-hidden bg-black/40"
+                style={{ width: CROP_VIEW_SIZE, height: CROP_VIEW_SIZE }}
+                onMouseDown={(e) => {
+                  setDragStart({
+                    x: e.clientX,
+                    y: e.clientY,
+                    offsetX: cropOffset.x,
+                    offsetY: cropOffset.y,
+                  })
+                }}
+                onMouseMove={(e) => {
+                  if (!dragStart) return
+                  const dx = e.clientX - dragStart.x
+                  const dy = e.clientY - dragStart.y
+                  const next = clampOffset(
+                    dragStart.offsetX + dx,
+                    dragStart.offsetY + dy
+                  )
+                  setCropOffset(next)
+                }}
+                onMouseUp={() => setDragStart(null)}
+                onMouseLeave={() => setDragStart(null)}
+              >
               <img
                 ref={cropImageRef}
                 src={cropSourceUrl}
                 alt="avatar crop preview"
                 onLoad={onCropImageLoad}
-                className="block w-full h-auto select-none"
+                className="absolute select-none"
                 draggable={false}
+                style={{
+                  left: `calc(50% + ${cropOffset.x}px)`,
+                  top: `calc(50% + ${cropOffset.y}px)`,
+                  transform: 'translate(-50%, -50%)',
+                  width: naturalSize.width
+                    ? `${naturalSize.width * getBaseScale() * cropZoom}px`
+                    : 'auto',
+                  height: naturalSize.height
+                    ? `${naturalSize.height * getBaseScale() * cropZoom}px`
+                    : 'auto',
+                  cursor: dragStart ? 'grabbing' : 'grab',
+                }}
               />
-              {cropRect && (
                 <div
-                  className="absolute border-2 border-primary bg-primary/10 pointer-events-none"
+                  className="absolute border-2 border-primary pointer-events-none"
                   style={{
-                    left: cropRect.x,
-                    top: cropRect.y,
-                    width: cropRect.size,
-                    height: cropRect.size,
+                    left: (CROP_VIEW_SIZE - CROP_FRAME_SIZE) / 2,
+                    top: (CROP_VIEW_SIZE - CROP_FRAME_SIZE) / 2,
+                    width: CROP_FRAME_SIZE,
+                    height: CROP_FRAME_SIZE,
+                    boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.35)',
                   }}
                 />
-              )}
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">缩放</label>
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.01}
+                  value={cropZoom}
+                  onChange={(e) => {
+                    const nextZoom = Number(e.target.value)
+                    const nextOffset = clampOffset(cropOffset.x, cropOffset.y, nextZoom)
+                    setCropZoom(nextZoom)
+                    setCropOffset(nextOffset)
+                  }}
+                  className="w-full"
+                />
+              </div>
             </div>
           )}
           <DialogFooter>

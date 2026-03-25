@@ -54,8 +54,24 @@ export async function POST(request: NextRequest) {
       data: { name, token, isActive: true }
     })
     
+    const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost:3000'
+    const proto = request.headers.get('x-forwarded-proto') || 'http'
+    const endpoint = `${proto}://${host}/api/activity`
+    const tokenBundle = Buffer.from(
+      JSON.stringify({
+        version: 1,
+        endpoint,
+        apiKey: result.token,
+        tokenName: result.name,
+      }),
+      'utf8'
+    ).toString('base64')
+
     // 返回完整 token（仅创建时可见）
-    return NextResponse.json({ success: true, data: result }, { status: 201 })
+    return NextResponse.json(
+      { success: true, data: result, tokenBundleBase64: tokenBundle, endpoint },
+      { status: 201 }
+    )
   } catch (error) {
     console.error('创建 Token 失败:', error)
     return NextResponse.json({ success: false, error: '创建失败' }, { status: 500 })

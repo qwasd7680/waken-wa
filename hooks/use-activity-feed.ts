@@ -10,12 +10,15 @@ interface ActivityItem {
   startedAt: string
   endedAt: string | null
   metadata?: Record<string, unknown> | null
+  statusText?: string
 }
 
 interface ActivityFeedData {
   activeStatuses: ActivityItem[]
   recentActivities: ActivityItem[]
   historyWindowMinutes: number
+  historyWindowHintText: string
+  recentTopApps: ActivityItem[]
   generatedAt: string
 }
 

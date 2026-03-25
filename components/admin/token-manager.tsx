@@ -44,6 +44,8 @@ export function TokenManager() {
   const [loading, setLoading] = useState(true)
   const [newTokenName, setNewTokenName] = useState('')
   const [newToken, setNewToken] = useState<string | null>(null)
+  const [newTokenBundle, setNewTokenBundle] = useState<string | null>(null)
+  const [newEndpoint, setNewEndpoint] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -80,6 +82,8 @@ export function TokenManager() {
       
       if (data.success) {
         setNewToken(data.data.token)
+        setNewTokenBundle(data.tokenBundleBase64 || null)
+        setNewEndpoint(data.endpoint || null)
         fetchTokens()
       }
     } catch {
@@ -121,6 +125,8 @@ export function TokenManager() {
     setDialogOpen(false)
     setNewTokenName('')
     setNewToken(null)
+    setNewTokenBundle(null)
+    setNewEndpoint(null)
   }
 
   const safeFormat = (value: string | null, fmt: string) => {
@@ -171,6 +177,28 @@ export function TokenManager() {
                     </Button>
                   </div>
                 </div>
+                {newTokenBundle && (
+                  <div className="rounded-lg bg-muted p-4 space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      一键接入配置（Base64，含 endpoint + key）
+                    </p>
+                    {newEndpoint && (
+                      <p className="text-xs text-muted-foreground">Endpoint: {newEndpoint}</p>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-xs font-mono break-all bg-background p-2 rounded">
+                        {newTokenBundle}
+                      </code>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => copyToClipboard(newTokenBundle)}
+                      >
+                        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <DialogFooter>
                   <Button onClick={closeDialog}>完成</Button>
                 </DialogFooter>

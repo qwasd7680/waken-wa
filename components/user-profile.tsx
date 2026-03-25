@@ -69,15 +69,7 @@ export function UserProfile({
             <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 flex-shrink-0" />
           )}
           <span className="text-muted-foreground font-light">
-            {isOnline ? '正在使用 ' : '最近使用 '}
-            <span className="text-foreground">{activity.processName}</span>
-            {activity.processTitle && (
-              <span className="text-muted-foreground">
-                {' '}— {activity.processTitle.length > 40
-                  ? activity.processTitle.slice(0, 40) + '...'
-                  : activity.processTitle}
-              </span>
-            )}
+            {activity.statusText || `${isOnline ? '正在使用 ' : '最近使用 '}${activity.processName}`}
           </span>
         </div>
       )}

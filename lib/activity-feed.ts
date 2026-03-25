@@ -4,7 +4,29 @@ export interface ActivityFeedData {
   activeStatuses: any[]
   recentActivities: any[]
   historyWindowMinutes: number
+  historyWindowHintText: string
+  recentTopApps: any[]
   generatedAt: string
+}
+
+function applyMessageRule(
+  processName: string,
+  processTitle: string | null,
+  rules: Array<{ match: string; text: string }>
+): string | null {
+  const processLower = processName.toLowerCase()
+  for (const rule of rules) {
+    const matcher = String(rule.match || '').trim().toLowerCase()
+    if (!matcher) continue
+    if (!processLower.includes(matcher)) continue
+
+    const template = String(rule.text || '').trim()
+    if (!template) continue
+    return template
+      .replaceAll('{process}', processName)
+      .replaceAll('{title}', processTitle || '')
+  }
+  return null
 }
 
 export async function getHistoryWindowMinutes(): Promise<number> {
@@ -15,7 +37,17 @@ export async function getHistoryWindowMinutes(): Promise<number> {
 }
 
 export async function getActivityFeedData(limit = 50): Promise<ActivityFeedData> {
-  const historyWindowMinutes = await getHistoryWindowMinutes()
+  const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
+  const minutes = Number(config?.historyWindowMinutes ?? 120)
+  const historyWindowMinutes = Number.isFinite(minutes)
+    ? Math.min(Math.max(Math.round(minutes), 10), 24 * 60)
+    : 120
+  const historyWindowHintText =
+    String(config?.historyWindowHintText ?? '').trim() ||
+    '历史窗口：最近 2 小时（可在设置中调整）'
+  const appMessageRules: Array<{ match: string; text: string }> = Array.isArray(config?.appMessageRules)
+    ? config.appMessageRules
+    : []
   const since = new Date(Date.now() - historyWindowMinutes * 60 * 1000)
 
   const [recentActivities, openActivities] = await Promise.all([
@@ -37,13 +69,30 @@ export async function getActivityFeedData(limit = 50): Promise<ActivityFeedData>
   for (const item of openActivities) {
     if (seen.has(item.device)) continue
     seen.add(item.device)
-    activeStatuses.push(item)
+    activeStatuses.push({
+      ...item,
+      statusText:
+        applyMessageRule(item.processName, item.processTitle, appMessageRules) ||
+        `正在使用 ${item.processName}${item.processTitle ? ` — ${item.processTitle}` : ''}`,
+    })
+  }
+
+  const recentTopApps: any[] = []
+  const seenProcess = new Set<string>()
+  for (const item of recentActivities) {
+    const key = item.processName.toLowerCase()
+    if (seenProcess.has(key)) continue
+    seenProcess.add(key)
+    recentTopApps.push(item)
+    if (recentTopApps.length >= 3) break
   }
 
   return {
     activeStatuses,
     recentActivities,
     historyWindowMinutes,
+    historyWindowHintText,
+    recentTopApps,
     generatedAt: new Date().toISOString(),
   }
 }

@@ -3,11 +3,23 @@ import { CurrentStatus } from '@/components/current-status'
 import { ActivityTimeline } from '@/components/activity-timeline'
 import prisma from '@/lib/prisma'
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
+import { verifySiteLockSession } from '@/lib/auth'
+import { SiteLockForm } from '@/components/site-lock-form'
 
 export default async function Home() {
   const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
   if (!config) {
     redirect('/admin/setup')
+  }
+
+  if (config.pageLockEnabled) {
+    const cookieStore = await cookies()
+    const token = cookieStore.get('site_lock')?.value
+    const unlocked = token ? await verifySiteLockSession(token) : null
+    if (!unlocked) {
+      return <SiteLockForm />
+    }
   }
 
   const userName = config.userName

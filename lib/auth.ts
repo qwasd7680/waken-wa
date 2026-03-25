@@ -13,6 +13,11 @@ export interface SessionPayload {
   exp: number
 }
 
+interface SiteLockPayload {
+  type: 'site_lock'
+  exp: number
+}
+
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12)
 }
@@ -34,6 +39,23 @@ export async function verifySession(token: string): Promise<SessionPayload | nul
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET)
     return payload as unknown as SessionPayload
+  } catch {
+    return null
+  }
+}
+
+export async function createSiteLockSession(): Promise<string> {
+  return new SignJWT({ type: 'site_lock' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime('1d')
+    .sign(JWT_SECRET)
+}
+
+export async function verifySiteLockSession(token: string): Promise<SiteLockPayload | null> {
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET)
+    if ((payload as any).type !== 'site_lock') return null
+    return payload as unknown as SiteLockPayload
   } catch {
     return null
   }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { hashPassword } from '@/lib/auth'
 import { getSession } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import bcrypt from 'bcryptjs'
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,6 +22,10 @@ export async function POST(request: NextRequest) {
       avatarUrl,
       userNote,
       historyWindowMinutes,
+      historyWindowHintText,
+      appMessageRules,
+      pageLockEnabled,
+      pageLockPassword,
       currentlyText,
       earlierText,
       updatesText,
@@ -36,6 +41,12 @@ export async function POST(request: NextRequest) {
     const normalizedHistoryWindowMinutes = Number.isFinite(parsedWindow)
       ? Math.min(Math.max(Math.round(parsedWindow), 10), 24 * 60)
       : 120
+    const normalizedHistoryWindowHintText =
+      String(historyWindowHintText ?? '').trim() ||
+      '历史窗口：最近 2 小时（可在设置中调整）'
+    const normalizedAppMessageRules = Array.isArray(appMessageRules) ? appMessageRules : []
+    const normalizedPageLockEnabled = Boolean(pageLockEnabled)
+    const rawPageLockPassword = String(pageLockPassword ?? '').trim()
     const normalizedCurrentlyText = String(currentlyText ?? '').trim() || 'currently'
     const normalizedEarlierText = String(earlierText ?? '').trim() || 'earlier'
     const normalizedUpdatesText =
@@ -63,6 +74,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const existingConfig = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
+    if (
+      normalizedPageLockEnabled &&
+      !rawPageLockPassword &&
+      !existingConfig?.pageLockPasswordHash
+    ) {
+      return NextResponse.json(
+        { success: false, error: '启用页面锁时请设置访问密码' },
+        { status: 400 }
+      )
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       let admin: { id: number; username: string } | null = null
       if (!hasAdmin) {
@@ -79,6 +102,11 @@ export async function POST(request: NextRequest) {
         })
       }
 
+      const pageLockPasswordHash =
+        rawPageLockPassword.length > 0
+          ? await bcrypt.hash(rawPageLockPassword, 12)
+          : existingConfig?.pageLockPasswordHash ?? null
+
       await (tx as any).siteConfig.upsert({
         where: { id: 1 },
         update: {
@@ -87,6 +115,10 @@ export async function POST(request: NextRequest) {
           avatarUrl: normalizedAvatarUrl,
           userNote: normalizedUserNote,
           historyWindowMinutes: normalizedHistoryWindowMinutes,
+          historyWindowHintText: normalizedHistoryWindowHintText,
+          appMessageRules: normalizedAppMessageRules,
+          pageLockEnabled: normalizedPageLockEnabled,
+          pageLockPasswordHash,
           currentlyText: normalizedCurrentlyText,
           earlierText: normalizedEarlierText,
           updatesText: normalizedUpdatesText,
@@ -99,6 +131,10 @@ export async function POST(request: NextRequest) {
           avatarUrl: normalizedAvatarUrl,
           userNote: normalizedUserNote,
           historyWindowMinutes: normalizedHistoryWindowMinutes,
+          historyWindowHintText: normalizedHistoryWindowHintText,
+          appMessageRules: normalizedAppMessageRules,
+          pageLockEnabled: normalizedPageLockEnabled,
+          pageLockPasswordHash,
           currentlyText: normalizedCurrentlyText,
           earlierText: normalizedEarlierText,
           updatesText: normalizedUpdatesText,
