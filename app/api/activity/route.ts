@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getActivityFeedData, getHistoryWindowMinutes } from '@/lib/activity-feed'
 
+// 强制动态渲染，禁用缓存
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 // 验证 API Token
 async function validateToken(request: NextRequest): Promise<boolean> {
   const authHeader = request.headers.get('authorization')
