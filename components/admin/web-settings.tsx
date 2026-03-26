@@ -42,12 +42,6 @@ interface SiteConfig {
   adminText: string
 }
 
-interface AdminUser {
-  id: number
-  username: string
-  createdAt: string
-}
-
 export function WebSettings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -61,10 +55,6 @@ export function WebSettings() {
   const [dragStart, setDragStart] = useState<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null)
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 })
   const cropImageRef = useRef<HTMLImageElement | null>(null)
-  const [admins, setAdmins] = useState<AdminUser[]>([])
-  const [newAdminUsername, setNewAdminUsername] = useState('')
-  const [newAdminPassword, setNewAdminPassword] = useState('')
-  const [creatingAdmin, setCreatingAdmin] = useState(false)
   const [form, setForm] = useState<SiteConfig>({
     userName: '',
     userBio: '',
@@ -112,9 +102,6 @@ export function WebSettings() {
           })
           setRulesText(JSON.stringify(rules, null, 2))
         }
-        const usersRes = await fetch('/api/admin/users')
-        const usersData = await usersRes.json()
-        if (usersData?.success) setAdmins(usersData.data || [])
       } finally {
         setLoading(false)
       }
@@ -224,34 +211,6 @@ export function WebSettings() {
     }
   }
 
-  const createAdmin = async () => {
-    setMessage('')
-    setCreatingAdmin(true)
-    try {
-      const res = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: newAdminUsername,
-          password: newAdminPassword,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok || !data?.success) {
-        setMessage(data?.error || '创建管理员失败')
-        return
-      }
-      setNewAdminUsername('')
-      setNewAdminPassword('')
-      setAdmins((prev) => [data.data, ...prev])
-      setMessage('管理员创建成功')
-    } catch {
-      setMessage('网络异常，请重试')
-    } finally {
-      setCreatingAdmin(false)
-    }
-  }
-
   const copyExportConfig = async () => {
     setMessage('')
     try {
@@ -336,7 +295,7 @@ export function WebSettings() {
             onClick={() => setCropDialogOpen(true)}
             className="px-3 py-1.5 border border-border rounded-md text-xs font-medium hover:bg-muted transition-colors"
           >
-            重新打开裁剪
+            重新打��裁剪
           </button>
         )}
         {form.avatarUrl && (
@@ -523,42 +482,6 @@ export function WebSettings() {
           value={form.pageLockPassword}
           onChange={(e) => patch('pageLockPassword', e.target.value)}
         />
-      </div>
-
-      <div className="space-y-2">
-        <Label>管理员账号（支持多个）</Label>
-        <div className="rounded-md border p-3 space-y-2">
-          {admins.length === 0 ? (
-            <p className="text-xs text-muted-foreground">暂无管理员</p>
-          ) : (
-            admins.map((u) => (
-              <div key={u.id} className="text-xs text-muted-foreground">
-                {u.username}
-              </div>
-            ))
-          )}
-        </div>
-        <div className="grid gap-2 sm:grid-cols-3">
-          <Input
-            placeholder="新管理员用户名"
-            value={newAdminUsername}
-            onChange={(e) => setNewAdminUsername(e.target.value)}
-          />
-          <Input
-            type="password"
-            placeholder="新管理员密码"
-            value={newAdminPassword}
-            onChange={(e) => setNewAdminPassword(e.target.value)}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            disabled={creatingAdmin || !newAdminUsername || !newAdminPassword}
-            onClick={createAdmin}
-          >
-            {creatingAdmin ? '创建中...' : '新增管理员'}
-          </Button>
-        </div>
       </div>
 
       {message && <p className="text-sm text-muted-foreground">{message}</p>}
