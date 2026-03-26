@@ -258,11 +258,20 @@ export function WebSettings() {
           onChange={(e) => patch('themePreset', e.target.value)}
           className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
         >
-          <option value="basic">Basic（默认）</option>
-          <option value="midnight">Midnight（深夜蓝）</option>
-          <option value="forest">Forest（森林绿）</option>
-          <option value="sakura">Sakura（樱花粉）</option>
+          <option value="basic">Basic - 默认主题</option>
+          <option value="obsidian">Obsidian - 纯黑极简</option>
+          <option value="mono">Mono - 纯白极简</option>
+          <option value="midnight">Midnight - 深邃蓝紫</option>
+          <option value="ocean">Ocean - 深海蓝绿</option>
+          <option value="nord">Nord - 北欧冷淡</option>
+          <option value="forest">Forest - 自然森林</option>
+          <option value="sakura">Sakura - 柔和樱花</option>
+          <option value="lavender">Lavender - 淡雅薰衣草</option>
+          <option value="amber">Amber - 温暖琥珀</option>
         </select>
+        <p className="text-xs text-muted-foreground">
+          深色系：Obsidian、Midnight、Ocean、Nord | 浅色系：Mono、Forest、Sakura、Lavender、Amber
+        </p>
       </div>
 
       <div className="space-y-2">
