@@ -185,7 +185,26 @@ export function SetupForm({ needAdminSetup, initialConfig }: SetupFormProps) {
         return
       }
 
-      router.push('/admin/login')
+      // 首次初始化成功后，直接登录并进入后台首页，避免再次回到 setup 流程。
+      if (needAdminSetup) {
+        const loginRes = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username,
+            password,
+          }),
+        })
+        const loginData = await loginRes.json()
+        if (!loginRes.ok || !loginData?.success) {
+          setError(loginData?.error || '初始化成功，但自动登录失败，请手动登录')
+          router.push('/admin/login')
+          router.refresh()
+          return
+        }
+      }
+
+      router.push('/admin')
       router.refresh()
     } catch {
       setError('网络异常，请重试')

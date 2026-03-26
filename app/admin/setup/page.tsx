@@ -8,7 +8,7 @@ export default async function AdminSetupPage() {
   const hasConfig = config !== null
 
   if (hasAdmin && hasConfig) {
-    redirect('/admin/login')
+    redirect('/admin')
   }
 
   return (
