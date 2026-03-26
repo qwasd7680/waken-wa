@@ -3,7 +3,27 @@
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
+import { Laptop, Smartphone, Tablet } from 'lucide-react'
 import { useActivityFeed } from '@/hooks/use-activity-feed'
+
+function getBatteryLabel(metadata: Record<string, unknown> | null | undefined): string | null {
+  const value = metadata?.deviceBatteryPercent
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  const clamped = Math.min(Math.max(Math.round(value), 0), 100)
+  return `${clamped}%`
+}
+
+function getDeviceType(
+  deviceName: string,
+  metadata: Record<string, unknown> | null | undefined
+): 'mobile' | 'tablet' | 'desktop' {
+  const explicit = String(metadata?.deviceType ?? '').trim().toLowerCase()
+  if (explicit === 'mobile' || explicit === 'tablet' || explicit === 'desktop') return explicit
+  const source = deviceName.toLowerCase()
+  if (/ipad|tablet|tab|平板/.test(source)) return 'tablet'
+  if (/iphone|android|mobile|phone|手机/.test(source)) return 'mobile'
+  return 'desktop'
+}
 
 export function ActivityTimeline() {
   const { feed, error } = useActivityFeed()
@@ -40,6 +60,8 @@ export function ActivityTimeline() {
       </div>
       <div className="space-y-2">
         {activities.map((activity) => {
+          const batteryLabel = getBatteryLabel(activity.metadata)
+          const deviceType = getDeviceType(activity.device, activity.metadata)
           const duration = activity.endedAt
             ? Math.round(
                 (new Date(activity.endedAt).getTime() -
@@ -74,7 +96,17 @@ export function ActivityTimeline() {
                   )}
 
                   <div className="flex items-center gap-3 text-xs text-muted-foreground/70">
-                    <span>{activity.device}</span>
+                    <span className="inline-flex items-center gap-1.5">
+                      {deviceType === 'mobile' ? (
+                        <Smartphone className="h-3.5 w-3.5" />
+                      ) : deviceType === 'tablet' ? (
+                        <Tablet className="h-3.5 w-3.5" />
+                      ) : (
+                        <Laptop className="h-3.5 w-3.5" />
+                      )}
+                      {activity.device}
+                      {batteryLabel ? ` · 电量 ${batteryLabel}` : ''}
+                    </span>
                     <span>
                       {format(new Date(activity.startedAt), 'HH:mm', {
                         locale: zhCN,

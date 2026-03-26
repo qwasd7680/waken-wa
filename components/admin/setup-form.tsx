@@ -100,17 +100,11 @@ export function SetupForm({ needAdminSetup, initialConfig }: SetupFormProps) {
     const totalScale = getBaseScale() * zoom
     const renderedWidth = naturalSize.width * totalScale
     const renderedHeight = naturalSize.height * totalScale
-    // 当图片小于视口时，允许图片在视口内自由移动但不超出视口边界
-    const halfView = CROP_VIEW_SIZE / 2
-    const halfW = renderedWidth / 2
-    const halfH = renderedHeight / 2
-    const maxX = Math.max(0, halfW - CROP_FRAME_SIZE / 2)
-    const maxY = Math.max(0, halfH - CROP_FRAME_SIZE / 2)
-    const minX = Math.min(0, halfView - halfW - (CROP_VIEW_SIZE - CROP_FRAME_SIZE) / 2)
-    const minY = Math.min(0, halfView - halfH - (CROP_VIEW_SIZE - CROP_FRAME_SIZE) / 2)
+    const maxX = Math.max(0, (renderedWidth - CROP_FRAME_SIZE) / 2)
+    const maxY = Math.max(0, (renderedHeight - CROP_FRAME_SIZE) / 2)
     return {
-      x: Math.min(maxX, Math.max(-maxX, Math.min(Math.max(x, minX), maxX))),
-      y: Math.min(maxY, Math.max(-maxY, Math.min(Math.max(y, minY), maxY))),
+      x: Math.min(maxX, Math.max(-maxX, x)),
+      y: Math.min(maxY, Math.max(-maxY, y)),
     }
   }
 

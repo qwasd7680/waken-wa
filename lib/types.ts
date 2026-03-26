@@ -3,8 +3,12 @@ export type { ActivityLog, ApiToken, AdminUser } from '@prisma/client'
 
 export interface ActivityInput {
   device: string
+  device_name?: string
+  device_type?: 'desktop' | 'tablet' | 'mobile'
   process_name: string
   process_title?: string
+  battery_level?: number
+  push_mode?: 'realtime' | 'active'
   metadata?: Record<string, unknown>
 }
 

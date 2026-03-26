@@ -10,6 +10,19 @@ export interface ActivityFeedData {
   generatedAt: string
 }
 
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function getPushModeFromMetadata(metadata: unknown): 'realtime' | 'active' {
+  const meta = asObject(metadata)
+  if (!meta) return 'realtime'
+  const mode = String(meta.pushMode ?? '').trim().toLowerCase()
+  if (mode === 'active' || mode === 'persistent') return 'active'
+  return 'realtime'
+}
+
 function applyMessageRule(
   processName: string,
   processTitle: string | null,
@@ -67,11 +80,17 @@ export async function getActivityFeedData(limit = 50): Promise<ActivityFeedData>
   const stillActive: typeof openActivities = []
 
   for (const activity of openActivities) {
+    const pushMode = getPushModeFromMetadata(activity.metadata)
+    const maybeInterval = (activity as any).reportIntervalSeconds
+    const maybeUpdatedAt = (activity as any).updatedAt as Date | undefined
     // 优先使用活动自己的上报间隔，如果没有则使用全局默认值
-    const intervalSeconds = activity.reportIntervalSeconds ?? defaultStaleSeconds
+    const intervalSeconds = maybeInterval ?? defaultStaleSeconds
     // 使用 updatedAt（最后上报时间）来判断是否过期
-    const lastReportTime = activity.updatedAt?.getTime() ?? activity.startedAt.getTime()
-    const isStale = now - lastReportTime > intervalSeconds * 1000
+    const lastReportTime = maybeUpdatedAt?.getTime() ?? activity.startedAt.getTime()
+    const isStale =
+      pushMode === 'active'
+        ? false
+        : now - lastReportTime > intervalSeconds * 1000
 
     if (isStale) {
       toClose.push(activity.id)
@@ -100,8 +119,11 @@ export async function getActivityFeedData(limit = 50): Promise<ActivityFeedData>
   for (const item of stillActive) {
     if (seen.has(item.device)) continue
     seen.add(item.device)
+    const pushMode = getPushModeFromMetadata(item.metadata)
     activeStatuses.push({
       ...item,
+      pushMode,
+      lastReportAt: (item as any).updatedAt ?? item.startedAt,
       statusText:
         applyMessageRule(item.processName, item.processTitle, appMessageRules) ||
         `正在使用 ${item.processName}${item.processTitle ? ` — ${item.processTitle}` : ''}`,

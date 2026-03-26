@@ -11,6 +11,9 @@ interface ActivityItem {
   endedAt: string | null
   metadata?: Record<string, unknown> | null
   statusText?: string
+  pushMode?: 'realtime' | 'active'
+  lastReportAt?: string
+  updatedAt?: string
 }
 
 interface ActivityFeedData {

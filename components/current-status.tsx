@@ -3,7 +3,38 @@
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
+import { Laptop, Smartphone, Tablet } from 'lucide-react'
 import { useActivityFeed } from '@/hooks/use-activity-feed'
+
+function getBatteryLabel(metadata: Record<string, unknown> | null | undefined): string | null {
+  const value = metadata?.deviceBatteryPercent
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  const clamped = Math.min(Math.max(Math.round(value), 0), 100)
+  return `${clamped}%`
+}
+
+function getPushMode(
+  metadata: Record<string, unknown> | null | undefined,
+  fallback?: 'realtime' | 'active'
+): 'realtime' | 'active' {
+  if (fallback === 'active' || fallback === 'realtime') return fallback
+  const raw = String(metadata?.pushMode ?? '').trim().toLowerCase()
+  if (raw === 'active' || raw === 'persistent') return 'active'
+  return 'realtime'
+}
+
+function getDeviceType(
+  deviceName: string,
+  metadata: Record<string, unknown> | null | undefined
+): 'mobile' | 'tablet' | 'desktop' {
+  const explicit = String(metadata?.deviceType ?? '').trim().toLowerCase()
+  if (explicit === 'mobile' || explicit === 'tablet' || explicit === 'desktop') return explicit
+
+  const source = deviceName.toLowerCase()
+  if (/ipad|tablet|tab|平板/.test(source)) return 'tablet'
+  if (/iphone|android|mobile|phone|手机/.test(source)) return 'mobile'
+  return 'desktop'
+}
 
 export function CurrentStatus() {
   const { feed, error } = useActivityFeed()
@@ -42,6 +73,10 @@ export function CurrentStatus() {
           0,
           Math.round((Date.now() - new Date(activity.startedAt).getTime()) / 1000)
         )
+        const batteryLabel = getBatteryLabel(activity.metadata)
+        const pushMode = getPushMode(activity.metadata, activity.pushMode)
+        const deviceType = getDeviceType(activity.device, activity.metadata)
+        const lastReportAt = activity.lastReportAt || activity.updatedAt || activity.startedAt
         const durationStr =
           duration < 60
             ? `${duration}s`
@@ -55,14 +90,28 @@ export function CurrentStatus() {
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-online animate-pulse"></div>
-                <span className="text-xs text-online font-medium">进行中</span>
+                <span className="text-xs text-online font-medium">
+                  {pushMode === 'active' ? '主动推送' : '实时推送'}
+                </span>
               </div>
 
               <div>
                 <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
                   Device
                 </div>
-                <div className="text-sm font-light">{activity.device}</div>
+                <div className="text-sm font-light flex items-center gap-2">
+                  {deviceType === 'mobile' ? (
+                    <Smartphone className="h-4 w-4 text-muted-foreground" />
+                  ) : deviceType === 'tablet' ? (
+                    <Tablet className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Laptop className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  <span>{activity.device}</span>
+                </div>
+                {batteryLabel && (
+                  <div className="text-xs text-muted-foreground mt-1">电量 {batteryLabel}</div>
+                )}
               </div>
 
               <div>
@@ -97,6 +146,14 @@ export function CurrentStatus() {
                     Duration
                   </div>
                   <div className="text-xs font-light">{durationStr}</div>
+                </div>
+                <div className="col-span-2">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+                    Last Update
+                  </div>
+                  <div className="text-xs font-light">
+                    {format(new Date(lastReportAt), 'MM/dd HH:mm:ss', { locale: zhCN })}
+                  </div>
                 </div>
               </div>
             </div>

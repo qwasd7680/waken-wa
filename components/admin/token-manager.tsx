@@ -312,8 +312,11 @@ export function TokenManager() {
   -H "Content-Type: application/json" \\
   -d '{
     "device": "MacBook Pro",
+    "device_type": "desktop",
     "process_name": "VS Code",
-    "process_title": "编辑 index.tsx"
+    "process_title": "编辑 index.tsx",
+    "battery_level": 82,
+    "push_mode": "realtime"
   }'`}
             </pre>
           </div>

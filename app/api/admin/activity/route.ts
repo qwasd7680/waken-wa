@@ -71,7 +71,59 @@ export async function POST(request: NextRequest) {
   
   try {
     const body = await request.json()
-    const { device, process_name, process_title, metadata } = body
+    const deviceRaw = body?.device ?? body?.device_name
+    const processNameRaw = body?.process_name
+    const processTitleRaw = body?.process_title
+    const batteryRaw = body?.battery_level ?? body?.device_battery
+    const deviceTypeRaw = body?.device_type
+    const pushModeRaw = body?.push_mode
+    const metadataRaw = body?.metadata
+
+    const device =
+      typeof deviceRaw === 'string'
+        ? deviceRaw.trim()
+        : ''
+    const process_name =
+      typeof processNameRaw === 'string'
+        ? processNameRaw.trim()
+        : ''
+    const process_title =
+      typeof processTitleRaw === 'string'
+        ? processTitleRaw.trim()
+        : null
+
+    let metadata: Record<string, unknown> | null = null
+    if (metadataRaw && typeof metadataRaw === 'object' && !Array.isArray(metadataRaw)) {
+      metadata = { ...(metadataRaw as Record<string, unknown>) }
+    }
+    if (typeof batteryRaw === 'number' && Number.isFinite(batteryRaw)) {
+      const batteryLevel = Math.min(Math.max(Math.round(batteryRaw), 0), 100)
+      metadata = {
+        ...(metadata || {}),
+        deviceBatteryPercent: batteryLevel,
+      }
+    }
+
+    if (typeof deviceTypeRaw === 'string') {
+      const normalizedType = deviceTypeRaw.trim().toLowerCase()
+      if (normalizedType === 'mobile' || normalizedType === 'tablet' || normalizedType === 'desktop') {
+        metadata = {
+          ...(metadata || {}),
+          deviceType: normalizedType,
+        }
+      }
+    }
+
+    if (typeof pushModeRaw === 'string') {
+      const normalizedMode = pushModeRaw.trim().toLowerCase()
+      if (normalizedMode === 'realtime' || normalizedMode === 'active' || normalizedMode === 'persistent') {
+        metadata = {
+          ...(metadata || {}),
+          pushMode: normalizedMode === 'persistent' ? 'active' : normalizedMode,
+        }
+      }
+    }
+    const metadataInput = metadata as Prisma.InputJsonValue | undefined
     
     if (!device || !process_name) {
       return NextResponse.json(
@@ -92,7 +144,7 @@ export async function POST(request: NextRequest) {
         processTitle: process_title || null,
         startedAt: new Date(),
         endedAt: null,
-        metadata: metadata || null
+        metadata: metadataInput
       }
     })
     

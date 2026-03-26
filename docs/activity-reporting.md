@@ -26,12 +26,18 @@
 可选字段：
 
 - `process_title`: 进程标题
+- `battery_level`: 当前设备电量（0-100，若设备/浏览器支持）
+- `device_type`: 设备类型（`desktop` / `tablet` / `mobile`）
+- `push_mode`: 推送模式（`realtime` / `active`）
 - `metadata`: 扩展 JSON 对象
+- `device_name`: `device` 的别名字段（兼容旧客户端）
 
 说明：
 
 - `started_at` / `ended_at` 无需上传，由服务端自动处理时间。
 - 同一设备上报新事件时，服务端会自动结束该设备上一条未结束状态。
+- `push_mode = realtime`：按超时规则自动判定离线。
+- `push_mode = active`：长期显示，不按超时自动结束，并展示最后更新时间。
 
 ## 3. curl 示例
 
@@ -41,8 +47,11 @@ curl -X POST "http://localhost:3000/api/activity" \
   -H "Content-Type: application/json" \
   -d '{
     "device": "MacBook Pro",
+    "device_type": "desktop",
     "process_name": "VS Code",
     "process_title": "editing setup-form.tsx",
+    "battery_level": 82,
+    "push_mode": "realtime",
     "metadata": {
       "source": "manual-test"
     }
@@ -52,6 +61,9 @@ curl -X POST "http://localhost:3000/api/activity" \
 ## 4. Node.js 示例
 
 ```ts
+const battery = await navigator.getBattery?.().catch(() => null)
+const batteryLevel = battery ? Math.round(battery.level * 100) : undefined
+
 await fetch('http://localhost:3000/api/activity', {
   method: 'POST',
   headers: {
@@ -59,9 +71,12 @@ await fetch('http://localhost:3000/api/activity', {
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
-    device: 'My PC',
+    device: navigator.platform || 'My PC',
+    device_type: 'desktop',
     process_name: 'Chrome',
     process_title: 'Dashboard',
+    battery_level: batteryLevel,
+    push_mode: 'active', // 主动推送：长期展示，显示最后更新时间
   }),
 })
 ```

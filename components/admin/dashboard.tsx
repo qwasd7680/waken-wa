@@ -80,13 +80,13 @@ export function AdminDashboard({ username }: DashboardProps) {
               <Key className="h-4 w-4" />
               API Token
             </TabsTrigger>
-            <TabsTrigger value="settings" className="gap-2">
-              <Settings className="h-4 w-4" />
-              设置
-            </TabsTrigger>
             <TabsTrigger value="account" className="gap-2">
               <UserCog className="h-4 w-4" />
               账户
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="gap-2">
+              <Settings className="h-4 w-4" />
+              设置
             </TabsTrigger>
           </TabsList>
 
@@ -108,12 +108,12 @@ export function AdminDashboard({ username }: DashboardProps) {
             <TokenManager />
           </TabsContent>
 
-          <TabsContent value="settings">
-            <WebSettings />
-          </TabsContent>
-
           <TabsContent value="account">
             <AccountSettings />
+          </TabsContent>
+
+          <TabsContent value="settings">
+            <WebSettings />
           </TabsContent>
         </Tabs>
       </main>
