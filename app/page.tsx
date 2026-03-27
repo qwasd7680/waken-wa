@@ -114,7 +114,7 @@ export default async function Home() {
       </div>
 
       <main className="min-h-screen relative">
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-16 pb-24">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-16 pb-40">
           <ContentReadingPanel className="p-5 sm:p-6">
             {/* Profile + current: tighter vertical rhythm */}
             <div className="flex flex-col gap-4">
