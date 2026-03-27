@@ -170,26 +170,34 @@ export async function getActivityFeedData(limit = 50): Promise<ActivityFeedData>
     seen.add(key)
     const pushMode = getPushModeFromMetadata(item.metadata)
     const maskedTitle = nameOnlySet.has(processKey) ? null : item.processTitle
-    activeStatuses.push(
-      redactGeneratedHashKeyForClient({
-        ...item,
-        processTitle: maskedTitle,
-        pushMode,
-        lastReportAt: (item as any).updatedAt ?? item.startedAt,
-        statusText:
-          applyMessageRule(item.processName, maskedTitle, appMessageRules) ||
-          `正在使用 ${item.processName}${maskedTitle ? ` — ${maskedTitle}` : ''}`,
-      } as Record<string, unknown>),
-    )
+    const ruleStatusText = applyMessageRule(item.processName, maskedTitle, appMessageRules)
+    // When a message rule matches, only statusText is sent; hide raw processTitle. With no rule, omit statusText and keep processTitle + processName for the client default layout.
+    const processTitleForClient = ruleStatusText ? null : maskedTitle
+    const row: Record<string, unknown> = {
+      ...item,
+      processTitle: processTitleForClient,
+      pushMode,
+      lastReportAt: (item as any).updatedAt ?? item.startedAt,
+    }
+    if (ruleStatusText) {
+      row.statusText = ruleStatusText
+    }
+    activeStatuses.push(redactGeneratedHashKeyForClient(row))
   }
 
   const recentTopApps: any[] = []
   const seenProcess = new Set<string>()
-  for (const item of recentActivities as Array<{ processName: string }>) {
+  for (const item of recentActivities as Array<{ processName: string; processTitle?: string | null }>) {
     const key = item.processName.toLowerCase()
     if (seenProcess.has(key)) continue
     seenProcess.add(key)
-    recentTopApps.push(item)
+    const processKey = normalizeProcessName(item.processName)
+    const maskedTitle = nameOnlySet.has(processKey) ? null : item.processTitle
+    const ruleStatusText = applyMessageRule(item.processName, maskedTitle ?? null, appMessageRules)
+    recentTopApps.push({
+      ...item,
+      processTitle: ruleStatusText ? null : maskedTitle,
+    })
     if (recentTopApps.length >= 3) break
   }
 

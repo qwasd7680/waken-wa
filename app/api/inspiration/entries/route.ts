@@ -7,7 +7,14 @@ import { linkInspirationAssetsToEntry, validateInlineImageDataUrl } from '@/lib/
 
 function formatStatusSnapshotFromFeed(feed: Awaited<ReturnType<typeof getActivityFeedData>>): string | null {
   const lines = feed.activeStatuses
-    .map((s: { statusText?: string }) => String(s?.statusText ?? '').trim())
+    .map((s: { statusText?: string; processName?: string; processTitle?: string | null }) => {
+      const st = String(s?.statusText ?? '').trim()
+      if (st) return st
+      const pn = String(s?.processName ?? '').trim()
+      const pt = s?.processTitle != null ? String(s.processTitle).trim() : ''
+      if (pt && pn) return `${pt} | ${pn}`
+      return pn || pt || ''
+    })
     .filter(Boolean)
   if (lines.length === 0) return null
   return lines.join('\n')

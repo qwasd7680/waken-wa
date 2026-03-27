@@ -66,6 +66,7 @@ export function CurrentStatus() {
           (activity.deviceId != null ? `device #${activity.deviceId}` : `activity #${activity.id}`)
         const deviceType = getDeviceType(deviceName, activity.metadata)
         const lastReportAt = activity.lastReportAt || activity.updatedAt || activity.startedAt
+        const statusLine = typeof activity.statusText === 'string' ? activity.statusText.trim() : ''
 
         return (
           <div
@@ -98,13 +99,19 @@ export function CurrentStatus() {
               <div className="flex items-start gap-2">
                 <AppWindow className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" aria-hidden />
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-foreground/90 min-w-0">
-                  {activity.processTitle ? (
+                  {statusLine ? (
+                    <span className="font-medium">{statusLine}</span>
+                  ) : (
                     <>
-                      <span className="font-medium">{activity.processTitle}</span>
-                      <span className="text-muted-foreground/50 select-none hidden sm:inline">|</span>
+                      {activity.processTitle ? (
+                        <>
+                          <span className="font-medium">{activity.processTitle}</span>
+                          <span className="text-muted-foreground/50 select-none hidden sm:inline">|</span>
+                        </>
+                      ) : null}
+                      <span className="text-muted-foreground">{activity.processName}</span>
                     </>
-                  ) : null}
-                  <span className="text-muted-foreground">{activity.processName}</span>
+                  )}
                 </div>
               </div>
 
