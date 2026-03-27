@@ -1,6 +1,6 @@
 // PostgreSQL schema (Vercel / Supabase / self-hosted Postgres).
 // Use: prisma generate --schema prisma/schema.postgres.prisma
-// Env: POSTGRES_PRISMA_URL
+// Env: standard postgres URL in DATABASE_URL or POSTGRES_URL (see lib/db-env.ts).
 
 generator client {
   provider = "prisma-client-js"
@@ -8,7 +8,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("POSTGRES_PRISMA_URL")
+  url      = env("DATABASE_URL")
 }
 
 model AdminUser {

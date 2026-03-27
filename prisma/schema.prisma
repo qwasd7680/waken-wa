@@ -1,5 +1,5 @@
 // Default: SQLite (local dev). Env: DATABASE_URL="file:./prisma/dev.db"
-// For PostgreSQL use prisma/schema.postgres.prisma and POSTGRES_PRISMA_URL.
+// For PostgreSQL use prisma/schema.postgres.prisma; URL: DATABASE_URL or POSTGRES_URL (postgres:// or postgresql://).
 
 generator client {
   provider = "prisma-client-js"

@@ -37,13 +37,28 @@ function loadEnvFile(envPath) {
 loadEnvFile(path.join(root, '.env'))
 loadEnvFile(path.join(root, '.env.local'))
 
-// Default sqlite; set DATABASE_PROVIDER=postgresql for Postgres + schema.postgres.prisma
-const provider = (process.env.DATABASE_PROVIDER || 'sqlite').toLowerCase()
+function isPostgresUrl(s) {
+  const t = typeof s === 'string' ? s.trim() : ''
+  return t.length > 0 && /^postgres(ql)?:\/\//i.test(t)
+}
+
+function pickPostgresUrl() {
+  const a = process.env.DATABASE_URL?.trim()
+  const b = process.env.POSTGRES_URL?.trim()
+  const c = process.env.POSTGRES_PRISMA_URL?.trim()
+  if (isPostgresUrl(a)) return a
+  if (isPostgresUrl(b)) return b
+  if (isPostgresUrl(c)) return c
+  return null
+}
+
+const inferredPostgres = pickPostgresUrl() !== null
+const explicitPostgres = (process.env.DATABASE_PROVIDER || '').toLowerCase() === 'postgresql'
+const provider =
+  inferredPostgres || explicitPostgres ? 'postgresql' : (process.env.DATABASE_PROVIDER || 'sqlite').toLowerCase()
+
 const schemaRel =
   provider === 'postgresql' ? 'prisma/schema.postgres.prisma' : 'prisma/schema.prisma'
-
-const hasPostgresUrl =
-  !!process.env.POSTGRES_URL?.trim() || !!process.env.POSTGRES_PRISMA_URL?.trim()
 
 if (provider === 'sqlite') {
   if (!process.env.DATABASE_URL?.trim()) {
@@ -51,10 +66,14 @@ if (provider === 'sqlite') {
     console.log('[init-db] DATABASE_URL unset; using default file:./prisma/dev.db')
   }
 } else {
-  if (!hasPostgresUrl) {
-    console.error('[init-db] Set POSTGRES_PRISMA_URL (or POSTGRES_URL) for postgresql')
+  const pgUrl = pickPostgresUrl()
+  if (!pgUrl) {
+    console.error(
+      '[init-db] PostgreSQL: set DATABASE_URL or POSTGRES_URL to a standard postgres URL (postgresql://... or postgres://...)',
+    )
     process.exit(1)
   }
+  process.env.DATABASE_URL = pgUrl
 }
 
 function run(cmd) {
