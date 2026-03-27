@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
 import { getActivityFeedData } from '@/lib/activity-feed'
+import { linkInspirationAssetsToEntry } from '@/lib/inspiration-inline-images'
 
 function formatStatusSnapshotFromFeed(feed: Awaited<ReturnType<typeof getActivityFeedData>>): string | null {
   const lines = feed.activeStatuses
@@ -122,6 +123,8 @@ export async function POST(request: NextRequest) {
         statusSnapshot,
       },
     })
+
+    await linkInspirationAssetsToEntry(prisma as any, entry.id, content)
 
     return NextResponse.json({ success: true, data: entry }, { status: 201 })
   } catch (error) {

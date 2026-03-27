@@ -105,5 +105,21 @@ model InspirationEntry {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  bodyAssets InspirationAsset[]
+
   @@map("inspiration_entries")
+}
+
+model InspirationAsset {
+  id Int @id @default(autoincrement())
+
+  publicKey    String  @unique @default(uuid()) @map("public_key") @db.Uuid
+  imageDataUrl String  @map("image_data_url") @db.Text
+
+  inspirationEntryId Int?              @map("inspiration_entry_id")
+  inspirationEntry   InspirationEntry? @relation(fields: [inspirationEntryId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("inspiration_assets")
 }

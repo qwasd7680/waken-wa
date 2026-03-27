@@ -6,8 +6,7 @@ import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.join(__dirname, '..')
 
-function loadDotEnvLocal() {
-  const envPath = path.join(root, '.env.local')
+function loadEnvFile(envPath) {
   if (!fs.existsSync(envPath)) return
 
   const raw = fs.readFileSync(envPath, 'utf8')
@@ -34,7 +33,9 @@ function loadDotEnvLocal() {
   }
 }
 
-loadDotEnvLocal()
+// Same order as typical Next/Prisma: .env then .env.local overrides
+loadEnvFile(path.join(root, '.env'))
+loadEnvFile(path.join(root, '.env.local'))
 
 // Default sqlite; set DATABASE_PROVIDER=postgresql for Postgres + schema.postgres.prisma
 const provider = (process.env.DATABASE_PROVIDER || 'sqlite').toLowerCase()
@@ -43,12 +44,11 @@ const schemaRel =
 
 const hasPostgresUrl =
   !!process.env.POSTGRES_URL?.trim() || !!process.env.POSTGRES_PRISMA_URL?.trim()
-const hasDatabaseUrl = !!process.env.DATABASE_URL?.trim()
 
 if (provider === 'sqlite') {
-  if (!hasDatabaseUrl) {
-    console.error('[init-db] Set DATABASE_URL for sqlite (e.g. file:./prisma/dev.db)')
-    process.exit(1)
+  if (!process.env.DATABASE_URL?.trim()) {
+    process.env.DATABASE_URL = 'file:./prisma/dev.db'
+    console.log('[init-db] DATABASE_URL unset; using default file:./prisma/dev.db')
   }
 } else {
   if (!hasPostgresUrl) {

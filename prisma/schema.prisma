@@ -104,5 +104,22 @@ model InspirationEntry {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  bodyAssets InspirationAsset[]
+
   @@map("inspiration_entries")
+}
+
+/// Inline images referenced from inspiration markdown (`/api/inspiration/img/<publicKey>`).
+model InspirationAsset {
+  id Int @id @default(autoincrement())
+
+  publicKey    String  @unique @default(uuid()) @map("public_key")
+  imageDataUrl String  @map("image_data_url")
+
+  inspirationEntryId Int?              @map("inspiration_entry_id")
+  inspirationEntry   InspirationEntry? @relation(fields: [inspirationEntryId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("inspiration_assets")
 }

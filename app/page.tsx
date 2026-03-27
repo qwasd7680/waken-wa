@@ -38,18 +38,21 @@ export default async function Home() {
   const customCss = String(config.customCss ?? '')
   const themeCss = `${themePresetCss}\n${customCss}`.trim()
 
-  const inspirationRows = await (prisma as any).inspirationEntry.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: 8,
-    select: {
-      id: true,
-      title: true,
-      content: true,
-      imageDataUrl: true,
-      statusSnapshot: true,
-      createdAt: true,
-    },
-  })
+  const [inspirationRows, inspirationTotal] = await Promise.all([
+    (prisma as any).inspirationEntry.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        imageDataUrl: true,
+        statusSnapshot: true,
+        createdAt: true,
+      },
+    }),
+    (prisma as any).inspirationEntry.count(),
+  ])
   const inspirationHomeEntries = inspirationRows.map((row: { createdAt: Date; [k: string]: unknown }) => ({
     ...row,
     createdAt: row.createdAt.toISOString(),
@@ -96,7 +99,10 @@ export default async function Home() {
             <h2 className="text-xs text-muted-foreground uppercase tracking-widest mb-6">
               {earlierText}
             </h2>
-            <InspirationHomeSection entries={inspirationHomeEntries} />
+            <InspirationHomeSection
+              entries={inspirationHomeEntries}
+              showArchiveLink={inspirationTotal > 3}
+            />
           </section>
         </div>
 

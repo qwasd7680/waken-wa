@@ -51,6 +51,7 @@ export function InspirationManager() {
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string>('')
   const [attachCurrentStatus, setAttachCurrentStatus] = useState(false)
+  const [bodyImageBusy, setBodyImageBusy] = useState(false)
 
   const [cropSourceUrl, setCropSourceUrl] = useState<string | null>(null)
   const [cropDialogOpen, setCropDialogOpen] = useState(false)
@@ -155,7 +156,7 @@ export function InspirationManager() {
             <div>
               <h3 className="text-lg font-semibold">灵感随想录</h3>
               <p className="text-sm text-muted-foreground">
-                正文支持 Markdown 与内联图片；封面图与正文配图均在弹窗中自由比例裁剪，导出 PNG DataURL
+                正文支持 Markdown；正文配图经裁剪后上传到服务器，正文中仅插入图片地址（不写入 Data URL）。封面图仍为可选 Data URL。
               </p>
             </div>
           </div>
@@ -221,9 +222,14 @@ export function InspirationManager() {
                     type="button"
                     variant="outline"
                     size="sm"
+                    disabled={bodyImageBusy || submitting}
                     onClick={() => bodyImageInputRef.current?.click()}
                   >
-                    <ImagePlus className="h-4 w-4 mr-1" />
+                    {bodyImageBusy ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <ImagePlus className="h-4 w-4 mr-1" />
+                    )}
                     插入正文配图
                   </Button>
                   <Textarea
@@ -316,14 +322,37 @@ export function InspirationManager() {
         title={cropTarget === 'body' ? '裁剪正文配图' : '裁剪封面配图'}
         description="拖动图片平移，滑块缩放，拖角点调整裁剪框；确认后导出 PNG。"
         onComplete={(dataUrl) => {
-          if (cropTarget === 'body') {
-            setContent((c) => {
-              const line = c.trim().length > 0 ? '\n\n' : ''
-              return `${c}${line}![](${dataUrl})`
-            })
-          } else {
+          if (cropTarget === 'cover') {
             setImageDataUrl(dataUrl)
+            return
           }
+          void (async () => {
+            setBodyImageBusy(true)
+            setMessage('')
+            try {
+              const res = await fetch('/api/inspiration/assets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ imageDataUrl: dataUrl }),
+                credentials: 'include',
+              })
+              const data = await res.json().catch(() => ({}))
+              if (!res.ok || !data?.success || !data?.data?.url) {
+                setMessage(typeof data?.error === 'string' ? data.error : '正文配图上传失败')
+                return
+              }
+              const url = String(data.data.url)
+              setContent((c) => {
+                const line = c.trim().length > 0 ? '\n\n' : ''
+                return `${c}${line}![](${url})`
+              })
+              setMessage('正文配图已插入')
+            } catch {
+              setMessage('正文配图上传失败')
+            } finally {
+              setBodyImageBusy(false)
+            }
+          })()
         }}
       />
 
@@ -331,16 +360,23 @@ export function InspirationManager() {
         <CardHeader>
           <h3 className="text-base font-semibold">API 提交（可从脚本/设备直接上报）</h3>
           <p className="text-sm text-muted-foreground">
-            使用与「活动上报」相同的 `API Token`（在管理后台 -&gt; API Token 查看/复制）。字段 `content` 为
-            Markdown 字符串；`imageDataUrl` 可选，可为 PNG/JPEG 等 DataURL。
+            使用与「活动上报」相同的 `API Token`。字段 `content` 为 Markdown；`imageDataUrl` 为可选封面图
+            DataURL。正文内嵌图请先 `POST /api/inspiration/assets`（JSON 字段 `imageDataUrl`），再在 `content` 里写
+            `![](/api/inspiration/img/…)`（路径取上传接口返回的 `url`）；提交条目后会自动绑定到该条记录。
           </p>
         </CardHeader>
         <CardContent>
           <pre className="text-xs bg-muted p-3 rounded-lg overflow-x-auto">
-            {`curl -X POST /api/inspiration/entries \\
+            {`# Inline image: upload first, then reference url in content.
+curl -X POST /api/inspiration/assets \\
   -H "Authorization: Bearer YOUR_TOKEN" \\
   -H "Content-Type: application/json" \\
-  -d '{"title":"可选","content":"# Markdown 正文\\\\n\\\\n支持 **加粗**。","imageDataUrl":null}'`}
+  -d '{"imageDataUrl":"data:image/png;base64,..."}'
+
+curl -X POST /api/inspiration/entries \\
+  -H "Authorization: Bearer YOUR_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"title":"可选","content":"![](/api/inspiration/img/<publicKey>)","imageDataUrl":null}'`}
           </pre>
         </CardContent>
       </Card>
