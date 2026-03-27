@@ -1,18 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { authenticateAdmin, createSession } from '@/lib/auth'
+import { verifyHCaptchaIfEnabled } from '@/lib/hcaptcha'
 
-// 强制动态渲染
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, password } = await request.json()
+    const { username, password, hcaptchaToken } = await request.json()
     
     if (!username || !password) {
       return NextResponse.json(
         { success: false, error: '请输入用户名和密码' },
         { status: 400 }
+      )
+    }
+
+    const captchaOk = await verifyHCaptchaIfEnabled(hcaptchaToken)
+    if (!captchaOk) {
+      return NextResponse.json(
+        { success: false, error: '人机验证失败，请重试' },
+        { status: 403 },
       )
     }
     

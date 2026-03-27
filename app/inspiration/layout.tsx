@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma'
 import { verifySiteLockSession } from '@/lib/auth'
 import { SiteLockForm } from '@/components/site-lock-form'
 import { getThemePresetCss } from '@/lib/theme-css'
+import { getHCaptchaPublicConfig } from '@/lib/hcaptcha'
 
 export default async function InspirationLayout({ children }: { children: React.ReactNode }) {
   const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
@@ -16,7 +17,8 @@ export default async function InspirationLayout({ children }: { children: React.
     const token = cookieStore.get('site_lock')?.value
     const unlocked = token ? await verifySiteLockSession(token) : null
     if (!unlocked) {
-      return <SiteLockForm />
+      const hcaptcha = await getHCaptchaPublicConfig()
+      return <SiteLockForm hcaptchaEnabled={hcaptcha.enabled} hcaptchaSiteKey={hcaptcha.siteKey} />
     }
   }
 

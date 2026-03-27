@@ -330,6 +330,9 @@ interface SiteConfig {
   appNameOnlyList: string[]
   pageLockEnabled: boolean
   pageLockPassword: string
+  hcaptchaEnabled: boolean
+  hcaptchaSiteKey: string
+  hcaptchaSecretKey: string
   currentlyText: string
   earlierText: string
   adminText: string
@@ -393,6 +396,9 @@ export function WebSettings() {
     appNameOnlyList: [],
     pageLockEnabled: false,
     pageLockPassword: '',
+    hcaptchaEnabled: false,
+    hcaptchaSiteKey: '',
+    hcaptchaSecretKey: '',
     currentlyText: '当前状态',
     earlierText: '最近的随想录',
     adminText: 'admin',
@@ -455,6 +461,9 @@ export function WebSettings() {
             appNameOnlyList: nameOnlyList,
             pageLockEnabled: Boolean(data.data.pageLockEnabled),
             pageLockPassword: '',
+            hcaptchaEnabled: Boolean(data.data.hcaptchaEnabled),
+            hcaptchaSiteKey: data.data.hcaptchaSiteKey ?? '',
+            hcaptchaSecretKey: '',
             currentlyText: data.data.currentlyText ?? '当前状态',
             earlierText: data.data.earlierText ?? '最近的随想录',
             adminText: data.data.adminText ?? 'admin',
@@ -630,8 +639,17 @@ export function WebSettings() {
       const {
         inspirationDeviceRestrictionEnabled,
         inspirationAllowedDeviceHashes: inspirationHashSelection,
+        hcaptchaSecretKey: hcaptchaSecretKeyForm,
         ...formRest
       } = form
+
+      const hcaptchaPatch: Record<string, unknown> = {
+        hcaptchaEnabled: formRest.hcaptchaEnabled,
+        hcaptchaSiteKey: formRest.hcaptchaSiteKey || null,
+      }
+      if (hcaptchaSecretKeyForm.trim()) {
+        hcaptchaPatch.hcaptchaSecretKey = hcaptchaSecretKeyForm.trim()
+      }
 
       const res = await fetch('/api/admin/settings', {
         method: 'PATCH',
@@ -645,6 +663,7 @@ export function WebSettings() {
           inspirationAllowedDeviceHashes: inspirationDeviceRestrictionEnabled
             ? normalizeStringList(inspirationHashSelection)
             : null,
+          ...hcaptchaPatch,
         }),
       })
       const data = await res.json()
@@ -1681,6 +1700,54 @@ export function WebSettings() {
           value={form.pageLockPassword}
           onChange={(e) => patch('pageLockPassword', e.target.value)}
         />
+      </div>
+
+      <div className="rounded-lg border border-border/60 bg-muted/10 p-4 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="hcaptcha-toggle" className="font-normal cursor-pointer">
+            启用 hCaptcha 登录验证
+          </Label>
+          <Switch
+            id="hcaptcha-toggle"
+            checked={form.hcaptchaEnabled}
+            onCheckedChange={(v) => patch('hcaptchaEnabled', v)}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          开启后，后台登录页将显示 hCaptcha 人机验证。需前往{' '}
+          <a
+            href="https://www.hcaptcha.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            hcaptcha.com
+          </a>{' '}
+          注册并获取 Site Key 和 Secret Key。
+        </p>
+        {form.hcaptchaEnabled && (
+          <div className="space-y-3 pt-1">
+            <div className="space-y-2">
+              <Label htmlFor="hcaptcha-sitekey">Site Key</Label>
+              <Input
+                id="hcaptcha-sitekey"
+                value={form.hcaptchaSiteKey}
+                onChange={(e) => patch('hcaptchaSiteKey', e.target.value)}
+                placeholder="10000000-ffff-ffff-ffff-000000000001"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="hcaptcha-secretkey">Secret Key（留空则不修改已保存的值）</Label>
+              <Input
+                id="hcaptcha-secretkey"
+                type="password"
+                value={form.hcaptchaSecretKey}
+                onChange={(e) => patch('hcaptchaSecretKey', e.target.value)}
+                placeholder="留空则保留之前配置的 Secret Key"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {message && <p className="text-sm text-muted-foreground">{message}</p>}

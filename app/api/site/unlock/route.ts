@@ -3,10 +3,11 @@ import { cookies } from 'next/headers'
 import bcrypt from 'bcryptjs'
 import prisma from '@/lib/prisma'
 import { createSiteLockSession } from '@/lib/auth'
+import { verifyHCaptchaIfEnabled } from '@/lib/hcaptcha'
 
 export async function POST(request: NextRequest) {
   try {
-    const { password } = await request.json()
+    const { password, hcaptchaToken } = await request.json()
     const rawPassword = String(password ?? '')
     if (!rawPassword) {
       return NextResponse.json({ success: false, error: '请输入访问密码' }, { status: 400 })
@@ -15,6 +16,14 @@ export async function POST(request: NextRequest) {
     const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
     if (!config?.pageLockEnabled) {
       return NextResponse.json({ success: true })
+    }
+
+    const captchaOk = await verifyHCaptchaIfEnabled(hcaptchaToken)
+    if (!captchaOk) {
+      return NextResponse.json(
+        { success: false, error: '人机验证失败，请重试' },
+        { status: 403 },
+      )
     }
 
     const hash = String(config.pageLockPasswordHash || '')

@@ -1,7 +1,8 @@
+import { NextResponse } from 'next/server'
 import { getActivityFeedData } from '@/lib/activity-feed'
+import { isSiteLockSatisfied } from '@/lib/auth'
 
 export const runtime = 'nodejs'
-// 强制动态渲染，禁用缓存
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
@@ -10,6 +11,10 @@ function toSseEvent(event: string, data: unknown): string {
 }
 
 export async function GET() {
+  if (!(await isSiteLockSatisfied())) {
+    return NextResponse.json({ success: false, error: '页面已锁定' }, { status: 403 })
+  }
+
   const encoder = new TextEncoder()
   let timer: ReturnType<typeof setInterval> | null = null
   let closed = false

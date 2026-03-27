@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: '当前密码错误' }, { status: 400 })
   }
 
-  const newHash = await bcrypt.hash(newPassword, 10)
+  const newHash = await bcrypt.hash(newPassword, 12)
   await prisma.adminUser.update({
     where: { id: session.userId },
     data: { passwordHash: newHash },

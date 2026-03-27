@@ -43,6 +43,7 @@ export async function GET() {
     const safe = {
       ...config,
       pageLockPasswordHash: undefined,
+      hcaptchaSecretKey: config.hcaptchaSecretKey ? '••••••••' : null,
     }
     return NextResponse.json({ success: true, data: safe })
   } catch (error) {
@@ -223,6 +224,30 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    let hcaptchaEnabled = Boolean(existing?.hcaptchaEnabled)
+    if (body.hcaptchaEnabled !== undefined && body.hcaptchaEnabled !== null) {
+      hcaptchaEnabled = Boolean(body.hcaptchaEnabled)
+    }
+    let hcaptchaSiteKey: string | null = existing?.hcaptchaSiteKey ?? null
+    if (body.hcaptchaSiteKey !== undefined) {
+      hcaptchaSiteKey = typeof body.hcaptchaSiteKey === 'string' && body.hcaptchaSiteKey.trim()
+        ? body.hcaptchaSiteKey.trim()
+        : null
+    }
+    let hcaptchaSecretKey: string | null = existing?.hcaptchaSecretKey ?? null
+    if (body.hcaptchaSecretKey !== undefined) {
+      hcaptchaSecretKey = typeof body.hcaptchaSecretKey === 'string' && body.hcaptchaSecretKey.trim()
+        ? body.hcaptchaSecretKey.trim()
+        : null
+    }
+
+    if (hcaptchaEnabled && (!hcaptchaSiteKey || !hcaptchaSecretKey)) {
+      return NextResponse.json(
+        { success: false, error: '启用 hCaptcha 时请填写 Site Key 和 Secret Key' },
+        { status: 400 },
+      )
+    }
+
     const config = await safeSiteConfigUpsert(prisma as any, {
       where: { id: 1 },
       update: {
@@ -258,6 +283,9 @@ export async function PATCH(request: NextRequest) {
         scheduleHomeShowLocation,
         scheduleHomeShowTeacher,
         scheduleHomeAfterClassesLabel,
+        hcaptchaEnabled,
+        hcaptchaSiteKey,
+        hcaptchaSecretKey,
       },
       create: {
         id: 1,
@@ -293,6 +321,9 @@ export async function PATCH(request: NextRequest) {
         scheduleHomeShowLocation,
         scheduleHomeShowTeacher,
         scheduleHomeAfterClassesLabel,
+        hcaptchaEnabled,
+        hcaptchaSiteKey,
+        hcaptchaSecretKey,
       },
     })
 

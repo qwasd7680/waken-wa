@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { verifySiteLockSession } from '@/lib/auth'
 import { SiteLockForm } from '@/components/site-lock-form'
+import { getHCaptchaPublicConfig } from '@/lib/hcaptcha'
 import { getThemePresetCss } from '@/lib/theme-css'
 import { LayoutFooterPortal } from '@/components/layout-footer-portal'
 import { ContentReadingPanel } from '@/components/content-reading-panel'
@@ -30,7 +31,8 @@ export default async function Home() {
     const token = cookieStore.get('site_lock')?.value
     const unlocked = token ? await verifySiteLockSession(token) : null
     if (!unlocked) {
-      return <SiteLockForm />
+      const hcaptcha = await getHCaptchaPublicConfig()
+      return <SiteLockForm hcaptchaEnabled={hcaptcha.enabled} hcaptchaSiteKey={hcaptcha.siteKey} />
     }
   }
 

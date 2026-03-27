@@ -10,7 +10,7 @@ if (_pg && !process.env.DATABASE_URL?.trim()) {
 const nextConfig = {
   transpilePackages: ['ical.js'],
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   images: {
     unoptimized: true,

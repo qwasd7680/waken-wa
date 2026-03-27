@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 function safeNextPath(raw: string | null): string {
@@ -14,7 +14,71 @@ function safeNextPath(raw: string | null): string {
   }
 }
 
-export function LoginForm() {
+declare global {
+  interface Window {
+    hcaptcha?: {
+      render: (container: string | HTMLElement, params: Record<string, unknown>) => string
+      reset: (widgetId: string) => void
+      getResponse: (widgetId: string) => string
+    }
+  }
+}
+
+function useHCaptcha(siteKey: string | null, enabled: boolean) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const widgetIdRef = useRef<string | null>(null)
+  const [token, setToken] = useState<string | null>(null)
+  const [ready, setReady] = useState(false)
+
+  const onVerify = useCallback((t: string) => setToken(t), [])
+  const onExpire = useCallback(() => setToken(null), [])
+
+  useEffect(() => {
+    if (!enabled || !siteKey) return
+
+    const renderWidget = () => {
+      if (!containerRef.current || !window.hcaptcha || widgetIdRef.current !== null) return
+      widgetIdRef.current = window.hcaptcha.render(containerRef.current, {
+        sitekey: siteKey,
+        callback: onVerify,
+        'expired-callback': onExpire,
+        theme: 'auto',
+      })
+      setReady(true)
+    }
+
+    if (window.hcaptcha) {
+      renderWidget()
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://js.hcaptcha.com/1/api.js?render=explicit'
+    script.async = true
+    script.onload = renderWidget
+    document.head.appendChild(script)
+
+    return () => {
+      widgetIdRef.current = null
+    }
+  }, [enabled, siteKey, onVerify, onExpire])
+
+  const reset = useCallback(() => {
+    if (widgetIdRef.current !== null && window.hcaptcha) {
+      window.hcaptcha.reset(widgetIdRef.current)
+    }
+    setToken(null)
+  }, [])
+
+  return { containerRef, token, reset, ready }
+}
+
+interface LoginFormProps {
+  hcaptchaEnabled?: boolean
+  hcaptchaSiteKey?: string | null
+}
+
+export function LoginForm({ hcaptchaEnabled = false, hcaptchaSiteKey = null }: LoginFormProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [username, setUsername] = useState('')
@@ -22,16 +86,28 @@ export function LoginForm() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  const captcha = useHCaptcha(hcaptchaSiteKey, hcaptchaEnabled)
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    if (hcaptchaEnabled && !captcha.token) {
+      setError('请先完成人机验证')
+      return
+    }
+
     setLoading(true)
 
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({
+          username,
+          password,
+          hcaptchaToken: captcha.token || undefined,
+        }),
       })
 
       const data = await res.json()
@@ -42,9 +118,11 @@ export function LoginForm() {
         router.refresh()
       } else {
         setError(data.error || 'Login failed')
+        captcha.reset()
       }
     } catch {
       setError('Network error, please try again')
+      captcha.reset()
     } finally {
       setLoading(false)
     }
@@ -90,6 +168,12 @@ export function LoginForm() {
               className="w-full px-4 py-2 border border-border rounded-sm bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-colors text-sm"
             />
           </div>
+
+          {hcaptchaEnabled && (
+            <div className="flex justify-center">
+              <div ref={captcha.containerRef} />
+            </div>
+          )}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 

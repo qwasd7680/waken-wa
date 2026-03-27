@@ -101,6 +101,9 @@ model SiteConfig {
   scheduleHomeShowLocation  Boolean  @map("schedule_home_show_location") @default(false)
   scheduleHomeShowTeacher   Boolean  @map("schedule_home_show_teacher") @default(false)
   scheduleHomeAfterClassesLabel String @map("schedule_home_after_classes_label") @db.VarChar(40) @default("正在摸鱼")
+  hcaptchaEnabled      Boolean  @map("hcaptcha_enabled") @default(false)
+  hcaptchaSiteKey      String?  @map("hcaptcha_site_key") @db.VarChar(200)
+  hcaptchaSecretKey    String?  @map("hcaptcha_secret_key") @db.VarChar(200)
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
 

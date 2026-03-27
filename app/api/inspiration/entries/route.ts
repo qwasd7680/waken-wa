@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { getBearerApiTokenRecord, getSession } from '@/lib/auth'
+import { getBearerApiTokenRecord, getSession, isSiteLockSatisfied } from '@/lib/auth'
 import { getActivityFeedData } from '@/lib/activity-feed'
 import { gateInspirationApiForDevice } from '@/lib/inspiration-device-allowlist'
 import { linkInspirationAssetsToEntry } from '@/lib/inspiration-inline-images'
@@ -19,6 +19,10 @@ export const revalidate = 0
 
 export async function GET(request: NextRequest) {
   try {
+    if (!(await isSiteLockSatisfied())) {
+      return NextResponse.json({ success: false, error: '页面已锁定' }, { status: 403 })
+    }
+
     const { searchParams } = new URL(request.url)
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100)
     const offset = parseInt(searchParams.get('offset') || '0')

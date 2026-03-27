@@ -118,6 +118,17 @@ export async function getSession(): Promise<SessionPayload | null> {
   return verifySession(token)
 }
 
+/** Returns true if the visitor has passed the site lock (or lock is disabled). */
+export async function isSiteLockSatisfied(): Promise<boolean> {
+  const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
+  if (!config?.pageLockEnabled) return true
+  const cookieStore = await cookies()
+  const token = cookieStore.get('site_lock')?.value
+  if (!token) return false
+  const payload = await verifySiteLockSession(token)
+  return payload !== null
+}
+
 export async function validateApiToken(token: string): Promise<boolean> {
   const row = await findActiveApiTokenBySecret(token)
   return row !== null

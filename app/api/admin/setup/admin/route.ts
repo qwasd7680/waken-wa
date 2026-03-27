@@ -10,7 +10,19 @@ import { DEFAULT_PAGE_TITLE, PAGE_TITLE_MAX_LEN } from '@/lib/default-page-title
 
 export async function POST(request: NextRequest) {
   try {
-    const hasAdmin = (await prisma.adminUser.count()) > 0
+    const [adminCount, existingConfig] = await Promise.all([
+      prisma.adminUser.count(),
+      (prisma as any).siteConfig.findUnique({ where: { id: 1 } }),
+    ])
+    const hasAdmin = adminCount > 0
+
+    if (hasAdmin && existingConfig) {
+      return NextResponse.json(
+        { success: false, error: '初始化已完成，请通过后台设置页面修改配置' },
+        { status: 403 },
+      )
+    }
+
     if (hasAdmin) {
       const session = await getSession()
       if (!session) {
