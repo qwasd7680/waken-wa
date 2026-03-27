@@ -1,17 +1,27 @@
-export type ThemePreset = 
-  | 'basic' 
-  | 'midnight' 
-  | 'forest' 
-  | 'sakura' 
-  | 'obsidian' 
-  | 'ocean' 
-  | 'amber' 
+import { buildCustomSurfaceCss } from '@/lib/theme-custom-surface'
+
+export type ThemePreset =
+  | 'basic'
+  | 'midnight'
+  | 'forest'
+  | 'sakura'
+  | 'obsidian'
+  | 'ocean'
+  | 'amber'
   | 'lavender'
   | 'mono'
   | 'nord'
+  | 'customSurface'
 
-export function getThemePresetCss(presetRaw: string | null | undefined): string {
+export function getThemePresetCss(
+  presetRaw: string | null | undefined,
+  themeCustomSurface?: unknown,
+): string {
   const preset = (presetRaw || 'basic') as ThemePreset
+
+  if (preset === 'customSurface') {
+    return buildCustomSurfaceCss(themeCustomSurface)
+  }
 
   // Midnight - 深邃蓝紫夜空，适合深夜使用
   if (preset === 'midnight') {

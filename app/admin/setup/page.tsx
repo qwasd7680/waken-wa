@@ -17,6 +17,7 @@ export default async function AdminSetupPage() {
       initialConfig={
         config
           ? {
+              pageTitle: config.pageTitle,
               userName: config.userName,
               userBio: config.userBio,
               avatarUrl: config.avatarUrl,
@@ -24,7 +25,6 @@ export default async function AdminSetupPage() {
               historyWindowMinutes: config.historyWindowMinutes,
               currentlyText: config.currentlyText,
               earlierText: config.earlierText,
-              updatesText: config.updatesText,
               adminText: config.adminText,
             }
           : undefined

@@ -20,7 +20,7 @@ export default async function InspirationLayout({ children }: { children: React.
     }
   }
 
-  const themePresetCss = getThemePresetCss(config.themePreset)
+  const themePresetCss = getThemePresetCss(config.themePreset, config.themeCustomSurface)
   const customCss = String(config.customCss ?? '')
   const themeCss = `${themePresetCss}\n${customCss}`.trim()
 

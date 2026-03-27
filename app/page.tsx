@@ -7,6 +7,7 @@ import { cookies } from 'next/headers'
 import { verifySiteLockSession } from '@/lib/auth'
 import { SiteLockForm } from '@/components/site-lock-form'
 import { getThemePresetCss } from '@/lib/theme-css'
+import { LayoutFooter } from '@/components/layout-footer'
 
 // 强制动态渲染，确保每次请求都获取最新数据
 export const dynamic = 'force-dynamic'
@@ -32,9 +33,8 @@ export default async function Home() {
   const userNote = config.userNote
   const currentlyText = config.currentlyText
   const earlierText = config.earlierText
-  const updatesText = config.updatesText
-  const adminText = config.adminText
-  const themePresetCss = getThemePresetCss(config.themePreset)
+  const adminText = String(config.adminText ?? '').trim() || 'admin'
+  const themePresetCss = getThemePresetCss(config.themePreset, config.themeCustomSurface)
   const customCss = String(config.customCss ?? '')
   const themeCss = `${themePresetCss}\n${customCss}`.trim()
 
@@ -74,29 +74,29 @@ export default async function Home() {
       </div>
 
       <main className="min-h-screen relative">
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-16 pb-24 space-y-8">
-          {/* Profile */}
-          <UserProfile
-            name={userName}
-            bio={userBio}
-            avatarUrl={avatarUrl}
-            note={userNote}
-          />
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-16 pb-24">
+          {/* Profile + current: tighter vertical rhythm */}
+          <div className="flex flex-col gap-4">
+            <UserProfile
+              name={userName}
+              bio={userBio}
+              avatarUrl={avatarUrl}
+              note={userNote}
+            />
 
-          {/* Divider */}
-          <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+            <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
 
-          {/* Current Activity Detail */}
-          <section>
-            <h2 className="text-xs text-muted-foreground uppercase tracking-widest mb-6">
-              {currentlyText}
-            </h2>
-            <CurrentStatus />
-          </section>
+            <section>
+              <h2 className="text-sm font-semibold text-foreground tracking-tight mb-4">
+                {currentlyText}
+              </h2>
+              <CurrentStatus />
+            </section>
+          </div>
 
           {/* Timeline */}
-          <section>
-            <h2 className="text-xs text-muted-foreground uppercase tracking-widest mb-6">
+          <section className="mt-8">
+            <h2 className="text-sm font-semibold text-foreground tracking-tight mb-6">
               {earlierText}
             </h2>
             <InspirationHomeSection
@@ -106,17 +106,7 @@ export default async function Home() {
           </section>
         </div>
 
-        {/* Footer */}
-        <footer className="border-t border-border/50 mt-16 backdrop-blur-sm">
-          <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <p>{updatesText}</p>
-              <a href="/admin" className="hover:text-foreground transition-colors">
-                {adminText}
-              </a>
-            </div>
-          </div>
-        </footer>
+        <LayoutFooter adminText={adminText} />
       </main>
     </>
   )

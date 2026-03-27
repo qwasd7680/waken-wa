@@ -13,6 +13,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { DEFAULT_PAGE_TITLE, PAGE_TITLE_MAX_LEN } from '@/lib/default-page-title'
+import {
+  parseThemeCustomSurface,
+  THEME_CUSTOM_SURFACE_DEFAULTS,
+} from '@/lib/theme-custom-surface'
 
 const CROP_VIEW_SIZE = 320
 const CROP_FRAME_SIZE = 220
@@ -24,12 +29,58 @@ function getMinZoom(naturalW: number, naturalH: number): number {
   return Math.max(0.1, fitScale / baseScale)
 }
 
+type ThemeCustomSurfaceForm = {
+  background: string
+  animatedBg: string
+  primary: string
+  foreground: string
+  card: string
+  border: string
+  mutedForeground: string
+  radius: string
+  hideFloatingOrbs: boolean
+}
+
+function emptyThemeCustomSurfaceForm(): ThemeCustomSurfaceForm {
+  return {
+    background: '',
+    animatedBg: '',
+    primary: '',
+    foreground: '',
+    card: '',
+    border: '',
+    mutedForeground: '',
+    radius: '',
+    hideFloatingOrbs: THEME_CUSTOM_SURFACE_DEFAULTS.hideFloatingOrbs,
+  }
+}
+
+function themeCustomSurfaceFromApi(raw: unknown): ThemeCustomSurfaceForm {
+  const p = parseThemeCustomSurface(raw)
+  return {
+    background: p.background || '',
+    animatedBg: p.animatedBg || '',
+    primary: p.primary || '',
+    foreground: p.foreground || '',
+    card: p.card || '',
+    border: p.border || '',
+    mutedForeground: p.mutedForeground || '',
+    radius: p.radius || '',
+    hideFloatingOrbs:
+      p.hideFloatingOrbs !== undefined
+        ? p.hideFloatingOrbs
+        : THEME_CUSTOM_SURFACE_DEFAULTS.hideFloatingOrbs,
+  }
+}
+
 interface SiteConfig {
+  pageTitle: string
   userName: string
   userBio: string
   avatarUrl: string
   userNote: string
   themePreset: string
+  themeCustomSurface: ThemeCustomSurfaceForm
   customCss: string
   historyWindowMinutes: number
   processStaleSeconds: number
@@ -42,7 +93,6 @@ interface SiteConfig {
   pageLockPassword: string
   currentlyText: string
   earlierText: string
-  updatesText: string
   adminText: string
   autoAcceptNewDevices: boolean
 }
@@ -63,11 +113,13 @@ export function WebSettings() {
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 })
   const cropImageRef = useRef<HTMLImageElement | null>(null)
   const [form, setForm] = useState<SiteConfig>({
+    pageTitle: DEFAULT_PAGE_TITLE,
     userName: '',
     userBio: '',
     avatarUrl: '',
     userNote: '',
     themePreset: 'basic',
+    themeCustomSurface: emptyThemeCustomSurfaceForm(),
     customCss: '',
     historyWindowMinutes: 120,
     processStaleSeconds: 500,
@@ -78,9 +130,8 @@ export function WebSettings() {
     appNameOnlyList: [],
     pageLockEnabled: false,
     pageLockPassword: '',
-    currentlyText: 'currently',
+    currentlyText: '当前状态',
     earlierText: '最近的随想录',
-    updatesText: 'updates every 30 seconds',
     adminText: 'admin',
     autoAcceptNewDevices: false,
   })
@@ -110,11 +161,13 @@ export function WebSettings() {
                 .filter((item: string) => item.length > 0)
             : []
           setForm({
+            pageTitle: data.data.pageTitle ?? DEFAULT_PAGE_TITLE,
             userName: data.data.userName ?? '',
             userBio: data.data.userBio ?? '',
             avatarUrl: data.data.avatarUrl ?? '',
             userNote: data.data.userNote ?? '',
             themePreset: data.data.themePreset ?? 'basic',
+            themeCustomSurface: themeCustomSurfaceFromApi(data.data.themeCustomSurface),
             customCss: data.data.customCss ?? '',
             historyWindowMinutes: Number(data.data.historyWindowMinutes ?? 120),
             processStaleSeconds: Number(data.data.processStaleSeconds ?? 500),
@@ -125,9 +178,8 @@ export function WebSettings() {
             appNameOnlyList: nameOnlyList,
             pageLockEnabled: Boolean(data.data.pageLockEnabled),
             pageLockPassword: '',
-            currentlyText: data.data.currentlyText ?? 'currently',
+            currentlyText: data.data.currentlyText ?? '当前状态',
             earlierText: data.data.earlierText ?? '最近的随想录',
-            updatesText: data.data.updatesText ?? 'updates every 30 seconds',
             adminText: data.data.adminText ?? 'admin',
             autoAcceptNewDevices: Boolean(data.data.autoAcceptNewDevices),
           })
@@ -141,6 +193,16 @@ export function WebSettings() {
 
   const patch = <K extends keyof SiteConfig>(key: K, value: SiteConfig[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const patchThemeSurface = <K extends keyof ThemeCustomSurfaceForm>(
+    key: K,
+    value: ThemeCustomSurfaceForm[K],
+  ) => {
+    setForm((prev) => ({
+      ...prev,
+      themeCustomSurface: { ...prev.themeCustomSurface, [key]: value },
+    }))
   }
 
   const getBaseScale = () => {
@@ -285,6 +347,17 @@ export function WebSettings() {
       <h3 className="font-semibold text-foreground">Web 配置</h3>
 
       <div className="space-y-2">
+        <Label>网页标题（浏览器标签页）</Label>
+        <Input
+          value={form.pageTitle}
+          maxLength={PAGE_TITLE_MAX_LEN}
+          onChange={(e) => patch('pageTitle', e.target.value)}
+          placeholder={DEFAULT_PAGE_TITLE}
+        />
+        <p className="text-xs text-muted-foreground">显示在浏览器标签上的站点标题，最多 {PAGE_TITLE_MAX_LEN} 字。</p>
+      </div>
+
+      <div className="space-y-2">
         <Label>首页名称</Label>
         <Input value={form.userName} onChange={(e) => patch('userName', e.target.value)} />
       </div>
@@ -316,11 +389,117 @@ export function WebSettings() {
           <option value="sakura">Sakura - 柔和樱花</option>
           <option value="lavender">Lavender - 淡雅薰衣草</option>
           <option value="amber">Amber - 温暖琥珀</option>
+          <option value="customSurface">Custom surface - 自定义背景 / 圆角 / 配色</option>
         </select>
         <p className="text-xs text-muted-foreground">
-          深色系：Obsidian、Midnight、Ocean、Nord | 浅色系：Mono、Forest、Sakura、Lavender、Amber
+          深色系：Obsidian、Midnight、Ocean、Nord | 浅色系：Mono、Forest、Sakura、Lavender、Amber |
+          Custom surface：可配页面色、渐变背景、圆角与是否显示光斑（偏个人站 / lemonkoi 式柔和布局）
         </p>
       </div>
+
+      {form.themePreset === 'customSurface' ? (
+        <div className="space-y-4 rounded-lg border border-border/60 bg-muted/15 p-4">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            留空则使用内置暖色默认。支持 oklch()、#hex、linear-gradient、以及安全的{' '}
+            <code className="rounded bg-muted px-1">url()</code>
+            背景图：可使用{' '}
+            <code className="rounded bg-muted px-1">https://…</code>、<code className="rounded bg-muted px-1">http://…</code>、站内路径{' '}
+            <code className="rounded bg-muted px-1">/images/bg.jpg</code>、相对路径{' '}
+            <code className="rounded bg-muted px-1">./a.png</code>，或{' '}
+            <code className="rounded bg-muted px-1">data:image/…;base64,…</code>
+            （勿在地址里含未转义的右括号）。仍会过滤尖括号、花括号、@import 等。
+          </p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            上面列出的多行是「各字段示例」，请分别填进对应输入框，不要把整段粘进某一个框。
+            <code className="rounded bg-muted px-1">url(&quot;…&quot;)</code> 与后面的渐变要写在「动效背景层」里，用英文逗号连成一条{' '}
+            <code className="rounded bg-muted px-1">background</code> 值（第一层画在最上）。
+            主题预设必须选 Custom surface，保存后才会注入首页。
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>页面底色 (--background)</Label>
+              <Input
+                value={form.themeCustomSurface.background}
+                onChange={(e) => patchThemeSurface('background', e.target.value)}
+                placeholder={THEME_CUSTOM_SURFACE_DEFAULTS.background}
+                className="font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>主色 (--primary)</Label>
+              <Input
+                value={form.themeCustomSurface.primary}
+                onChange={(e) => patchThemeSurface('primary', e.target.value)}
+                placeholder={THEME_CUSTOM_SURFACE_DEFAULTS.primary}
+                className="font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>正文色 (--foreground)</Label>
+              <Input
+                value={form.themeCustomSurface.foreground}
+                onChange={(e) => patchThemeSurface('foreground', e.target.value)}
+                placeholder={THEME_CUSTOM_SURFACE_DEFAULTS.foreground}
+                className="font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>卡片底色 (--card)</Label>
+              <Input
+                value={form.themeCustomSurface.card}
+                onChange={(e) => patchThemeSurface('card', e.target.value)}
+                placeholder={THEME_CUSTOM_SURFACE_DEFAULTS.card}
+                className="font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>边框 (--border)</Label>
+              <Input
+                value={form.themeCustomSurface.border}
+                onChange={(e) => patchThemeSurface('border', e.target.value)}
+                placeholder={THEME_CUSTOM_SURFACE_DEFAULTS.border}
+                className="font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>次要文字 (--muted-foreground)</Label>
+              <Input
+                value={form.themeCustomSurface.mutedForeground}
+                onChange={(e) => patchThemeSurface('mutedForeground', e.target.value)}
+                placeholder={THEME_CUSTOM_SURFACE_DEFAULTS.mutedForeground}
+                className="font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>全局圆角 (--radius)</Label>
+              <Input
+                value={form.themeCustomSurface.radius}
+                onChange={(e) => patchThemeSurface('radius', e.target.value)}
+                placeholder={THEME_CUSTOM_SURFACE_DEFAULTS.radius}
+                className="font-mono text-xs max-w-xs"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>动效背景层 (.animated-bg)</Label>
+            <textarea
+              rows={5}
+              value={form.themeCustomSurface.animatedBg}
+              onChange={(e) => patchThemeSurface('animatedBg', e.target.value)}
+              placeholder={THEME_CUSTOM_SURFACE_DEFAULTS.animatedBg}
+              className="w-full px-3 py-2 border rounded-md bg-background text-xs font-mono leading-relaxed"
+            />
+          </div>
+          <Label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.themeCustomSurface.hideFloatingOrbs}
+              onChange={(e) => patchThemeSurface('hideFloatingOrbs', e.target.checked)}
+            />
+            <span className="text-sm">隐藏浮动光斑（更干净的静态渐变背景）</span>
+          </Label>
+        </div>
+      ) : null}
 
       <div className="space-y-2">
         <Label>自定义 CSS 覆写（主界面）</Label>
@@ -498,6 +677,16 @@ export function WebSettings() {
       </div>
 
       <div className="space-y-2">
+        <Label>后台入口文案</Label>
+        <Input
+          value={form.adminText}
+          onChange={(e) => patch('adminText', e.target.value)}
+          placeholder="例如：admin / 后台"
+        />
+        <p className="text-xs text-muted-foreground">显示在首页页脚右侧，链向后台。</p>
+      </div>
+
+      <div className="space-y-2">
         <Label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -509,17 +698,6 @@ export function WebSettings() {
         <p className="text-xs text-muted-foreground">
           关闭后，未知 GeneratedHashKey 首次上报会进入待审核状态，需要在“设备管理”中手动通过。
         </p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label>底部更新文案</Label>
-          <Input value={form.updatesText} onChange={(e) => patch('updatesText', e.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <Label>后台入口文案</Label>
-          <Input value={form.adminText} onChange={(e) => patch('adminText', e.target.value)} />
-        </div>
       </div>
 
       <div className="space-y-2">
@@ -623,16 +801,15 @@ export function WebSettings() {
         {form.appFilterMode === 'blacklist' ? (
           <div className="space-y-3 pt-2 border-t border-border/50">
             <Label htmlFor="blacklist-input">黑名单应用名</Label>
-            <div className="flex flex-wrap items-start gap-3">
-              <div className="flex-1 min-w-[240px] space-y-2">
-                <p className="text-xs text-muted-foreground">不区分大小写，每行添加一个应用名。</p>
-                <Input
-                  id="blacklist-input"
-                  value={blacklistInput}
-                  onChange={(e) => setBlacklistInput(e.target.value)}
-                  placeholder="例如：WeChat.exe"
-                />
-              </div>
+            <p className="text-xs text-muted-foreground">不区分大小写，每行添加一个应用名。</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                id="blacklist-input"
+                className="flex-1 min-w-[240px]"
+                value={blacklistInput}
+                onChange={(e) => setBlacklistInput(e.target.value)}
+                placeholder="例如：WeChat.exe"
+              />
               <Button
                 type="button"
                 className="shrink-0"
@@ -676,16 +853,15 @@ export function WebSettings() {
         ) : (
           <div className="space-y-3 pt-2 border-t border-border/50">
             <Label htmlFor="whitelist-input">白名单应用名</Label>
-            <div className="flex flex-wrap items-start gap-3">
-              <div className="flex-1 min-w-[240px] space-y-2">
-                <p className="text-xs text-muted-foreground">不区分大小写；仅这些应用会出现在前台。</p>
-                <Input
-                  id="whitelist-input"
-                  value={whitelistInput}
-                  onChange={(e) => setWhitelistInput(e.target.value)}
-                  placeholder="例如：Code.exe"
-                />
-              </div>
+            <p className="text-xs text-muted-foreground">不区分大小写；仅这些应用会出现在前台。</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                id="whitelist-input"
+                className="flex-1 min-w-[240px]"
+                value={whitelistInput}
+                onChange={(e) => setWhitelistInput(e.target.value)}
+                placeholder="例如：Code.exe"
+              />
               <Button
                 type="button"
                 className="shrink-0"
@@ -730,20 +906,16 @@ export function WebSettings() {
       </div>
 
       <div className="space-y-3">
-        <Label>仅显示应用名</Label>
-
-        <div className="flex flex-wrap items-start gap-3">
-          <div className="flex-1 min-w-[240px] space-y-2">
-            <Label htmlFor="nameOnly-input" className="text-xs font-normal text-muted-foreground">
-              输入应用名（不区分大小写）
-            </Label>
-            <Input
-              id="nameOnly-input"
-              value={nameOnlyListInput}
-              onChange={(e) => setNameOnlyListInput(e.target.value)}
-              placeholder="例如：Code.exe"
-            />
-          </div>
+        <Label htmlFor="nameOnly-input">仅显示应用名</Label>
+        <p className="text-xs text-muted-foreground">输入应用名（不区分大小写）</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            id="nameOnly-input"
+            className="flex-1 min-w-[240px]"
+            value={nameOnlyListInput}
+            onChange={(e) => setNameOnlyListInput(e.target.value)}
+            placeholder="例如：Code.exe"
+          />
           <Button
             type="button"
             className="shrink-0"

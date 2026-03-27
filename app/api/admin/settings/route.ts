@@ -3,7 +3,9 @@ import { getSession } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { normalizeCustomCss } from '@/lib/theme-css'
+import { parseThemeCustomSurface } from '@/lib/theme-custom-surface'
 import { safeSiteConfigUpsert } from '@/lib/safe-site-config-upsert'
+import { DEFAULT_PAGE_TITLE, PAGE_TITLE_MAX_LEN } from '@/lib/default-page-title'
 
 // 强制动态渲染，禁用缓存
 export const dynamic = 'force-dynamic'
@@ -44,16 +46,17 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json()
+    const pageTitleRaw = String(body.pageTitle ?? '').trim() || DEFAULT_PAGE_TITLE
+    const pageTitle = pageTitleRaw.slice(0, PAGE_TITLE_MAX_LEN)
     const userName = String(body.userName ?? '').trim()
     const userBio = String(body.userBio ?? '').trim()
     const avatarUrl = String(body.avatarUrl ?? '').trim()
     const userNote = String(body.userNote ?? '').trim()
     const themePreset = String(body.themePreset ?? 'basic').trim() || 'basic'
+    const themeCustomSurface = parseThemeCustomSurface(body.themeCustomSurface)
     const customCss = normalizeCustomCss(body.customCss)
-    const currentlyText = String(body.currentlyText ?? '').trim() || 'currently'
+    const currentlyText = String(body.currentlyText ?? '').trim() || '当前状态'
     const earlierText = String(body.earlierText ?? '').trim() || '最近的随想录'
-    const updatesText =
-      String(body.updatesText ?? '').trim() || 'updates every 30 seconds'
     const adminText = String(body.adminText ?? '').trim() || 'admin'
     const pageLockEnabled = Boolean(body.pageLockEnabled)
     const autoAcceptNewDevices = Boolean(body.autoAcceptNewDevices)
@@ -108,11 +111,13 @@ export async function PATCH(request: NextRequest) {
     const config = await safeSiteConfigUpsert(prisma as any, {
       where: { id: 1 },
       update: {
+        pageTitle,
         userName,
         userBio,
         avatarUrl,
         userNote,
         themePreset,
+        themeCustomSurface,
         customCss,
         historyWindowMinutes,
         appMessageRules,
@@ -125,17 +130,18 @@ export async function PATCH(request: NextRequest) {
         pageLockPasswordHash,
         currentlyText,
         earlierText,
-        updatesText,
         adminText,
         autoAcceptNewDevices,
       },
       create: {
         id: 1,
+        pageTitle,
         userName,
         userBio,
         avatarUrl,
         userNote,
         themePreset,
+        themeCustomSurface,
         customCss,
         historyWindowMinutes,
         appMessageRules,
@@ -148,7 +154,6 @@ export async function PATCH(request: NextRequest) {
         pageLockPasswordHash,
         currentlyText,
         earlierText,
-        updatesText,
         adminText,
         autoAcceptNewDevices,
       },

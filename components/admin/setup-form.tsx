@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ImageCropDialog } from '@/components/admin/image-crop-dialog'
+import { DEFAULT_PAGE_TITLE, PAGE_TITLE_MAX_LEN } from '@/lib/default-page-title'
 
 interface SetupInitialConfig {
+  pageTitle?: string
   userName: string
   userBio: string
   avatarUrl: string
@@ -12,7 +14,6 @@ interface SetupInitialConfig {
   historyWindowMinutes: number
   currentlyText: string
   earlierText: string
-  updatesText: string
   adminText: string
 }
 
@@ -26,6 +27,9 @@ export function SetupForm({ needAdminSetup, initialConfig }: SetupFormProps) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [pageTitle, setPageTitle] = useState(
+    initialConfig?.pageTitle ?? DEFAULT_PAGE_TITLE
+  )
   const [userName, setUserName] = useState(initialConfig?.userName ?? '')
   const [userBio, setUserBio] = useState(initialConfig?.userBio ?? '')
   const [avatarUrl, setAvatarUrl] = useState(initialConfig?.avatarUrl ?? '')
@@ -35,7 +39,6 @@ export function SetupForm({ needAdminSetup, initialConfig }: SetupFormProps) {
   )
   const [currentlyText, setCurrentlyText] = useState(initialConfig?.currentlyText ?? '')
   const [earlierText, setEarlierText] = useState(initialConfig?.earlierText ?? '')
-  const [updatesText, setUpdatesText] = useState(initialConfig?.updatesText ?? '')
   const [adminText, setAdminText] = useState(initialConfig?.adminText ?? '')
   const [cropSourceUrl, setCropSourceUrl] = useState<string | null>(null)
   const [cropDialogOpen, setCropDialogOpen] = useState(false)
@@ -67,6 +70,7 @@ export function SetupForm({ needAdminSetup, initialConfig }: SetupFormProps) {
         body: JSON.stringify({
           username: needAdminSetup ? username : undefined,
           password: needAdminSetup ? password : undefined,
+          pageTitle: pageTitle.slice(0, PAGE_TITLE_MAX_LEN),
           userName,
           userBio,
           avatarUrl,
@@ -74,7 +78,6 @@ export function SetupForm({ needAdminSetup, initialConfig }: SetupFormProps) {
           historyWindowMinutes,
           currentlyText,
           earlierText,
-          updatesText,
           adminText,
         }),
       })
@@ -185,6 +188,18 @@ export function SetupForm({ needAdminSetup, initialConfig }: SetupFormProps) {
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">Homepage Profile</p>
             <div className="space-y-3">
               <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">网页标题（浏览器标签页）</label>
+                <p className="text-[11px] text-muted-foreground">浏览器标签上显示的站点标题，最多 {PAGE_TITLE_MAX_LEN} 字。</p>
+                <input
+                  type="text"
+                  value={pageTitle}
+                  maxLength={PAGE_TITLE_MAX_LEN}
+                  onChange={(e) => setPageTitle(e.target.value)}
+                  placeholder={DEFAULT_PAGE_TITLE}
+                  className="w-full px-4 py-2.5 border border-border rounded-md bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                />
+              </div>
+              <div className="space-y-1.5">
                 <label className="text-xs font-medium text-foreground">首页名称</label>
                 <p className="text-[11px] text-muted-foreground">展示在头像右侧的主名称（例如昵称、品牌名）。</p>
                 <input
@@ -292,7 +307,7 @@ export function SetupForm({ needAdminSetup, initialConfig }: SetupFormProps) {
                     type="text"
                     value={currentlyText}
                     onChange={(e) => setCurrentlyText(e.target.value)}
-                    placeholder="例如：currently / 当前"
+                    placeholder="例如：当前状态"
                     className="w-full px-3 py-2.5 border border-border rounded-md bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                   />
                 </div>
@@ -308,29 +323,16 @@ export function SetupForm({ needAdminSetup, initialConfig }: SetupFormProps) {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground">底部更新提示文案</label>
-                  <p className="text-[11px] text-muted-foreground">显示在页脚左侧，说明刷新频率或提示信息。</p>
-                  <input
-                    type="text"
-                    value={updatesText}
-                    onChange={(e) => setUpdatesText(e.target.value)}
-                    placeholder="例如：updates every 30 seconds"
-                    className="w-full px-3 py-2.5 border border-border rounded-md bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground">后台入口文案</label>
-                  <p className="text-[11px] text-muted-foreground">显示在页脚右侧，点击后进入后台。</p>
-                  <input
-                    type="text"
-                    value={adminText}
-                    onChange={(e) => setAdminText(e.target.value)}
-                    placeholder="例如：admin / 后台"
-                    className="w-full px-3 py-2.5 border border-border rounded-md bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">后台入口文案</label>
+                <p className="text-[11px] text-muted-foreground">显示在页脚右侧，点击后进入后台。</p>
+                <input
+                  type="text"
+                  value={adminText}
+                  onChange={(e) => setAdminText(e.target.value)}
+                  placeholder="例如：admin / 后台"
+                  className="w-full px-3 py-2.5 border border-border rounded-md bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                />
               </div>
             </div>
           </div>

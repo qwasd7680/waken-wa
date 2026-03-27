@@ -1,13 +1,14 @@
 import type { Metadata } from 'next'
 import { Noto_Sans_SC, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import prisma from '@/lib/prisma'
+import { DEFAULT_PAGE_TITLE, PAGE_TITLE_MAX_LEN } from '@/lib/default-page-title'
 import './globals.css'
 
 const _notoSansSC = Noto_Sans_SC({ subsets: ["latin"], weight: ["300", "400", "500"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
-export const metadata: Metadata = {
-  title: 'Activity Tracker - 实时活动状态',
+const staticMetadataBase: Omit<Metadata, 'title'> = {
   description: '追踪并展示你的实时活动状态，包括设备、进程和时间信息',
   generator: 'v0.app',
   icons: {
@@ -27,6 +28,23 @@ export const metadata: Metadata = {
     ],
     apple: '/apple-icon.png',
   },
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  let title = DEFAULT_PAGE_TITLE
+  try {
+    const config = await (prisma as any).siteConfig.findUnique({
+      where: { id: 1 },
+      select: { pageTitle: true },
+    })
+    const raw = String(config?.pageTitle ?? '').trim()
+    if (raw) {
+      title = raw.slice(0, PAGE_TITLE_MAX_LEN)
+    }
+  } catch {
+    // e.g. DB not ready during build or first boot
+  }
+  return { ...staticMetadataBase, title }
 }
 
 export default function RootLayout({

@@ -8,7 +8,7 @@ export default function InspirationArchivePage() {
     <main className="min-h-screen relative">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-16 pb-24 space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xs text-muted-foreground uppercase tracking-widest">随想录</h1>
+          <h1 className="text-sm font-semibold text-foreground tracking-tight">随想录</h1>
           <Link href="/" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
             ← 返回首页
           </Link>

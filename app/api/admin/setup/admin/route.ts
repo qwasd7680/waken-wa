@@ -4,7 +4,9 @@ import { getSession } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { normalizeCustomCss } from '@/lib/theme-css'
+import { parseThemeCustomSurface } from '@/lib/theme-custom-surface'
 import { safeSiteConfigUpsert } from '@/lib/safe-site-config-upsert'
+import { DEFAULT_PAGE_TITLE, PAGE_TITLE_MAX_LEN } from '@/lib/default-page-title'
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,6 +26,7 @@ export async function POST(request: NextRequest) {
       avatarUrl,
       userNote,
       themePreset,
+      themeCustomSurface,
       customCss,
       historyWindowMinutes,
       appMessageRules,
@@ -36,8 +39,8 @@ export async function POST(request: NextRequest) {
       pageLockPassword,
       currentlyText,
       earlierText,
-      updatesText,
       adminText,
+      pageTitle,
     } = await request.json()
     const normalizedUsername = String(username ?? '').trim()
     const rawPassword = String(password ?? '')
@@ -46,6 +49,7 @@ export async function POST(request: NextRequest) {
     const normalizedAvatarUrl = String(avatarUrl ?? '').trim()
     const normalizedUserNote = String(userNote ?? '').trim()
     const normalizedThemePreset = String(themePreset ?? 'basic').trim() || 'basic'
+    const normalizedThemeCustomSurface = parseThemeCustomSurface(themeCustomSurface ?? {})
     const normalizedCustomCss = normalizeCustomCss(customCss)
     const parsedWindow = Number(historyWindowMinutes ?? 120)
     const normalizedHistoryWindowMinutes = Number.isFinite(parsedWindow)
@@ -76,11 +80,12 @@ export async function POST(request: NextRequest) {
       : []
     const normalizedPageLockEnabled = Boolean(pageLockEnabled)
     const rawPageLockPassword = String(pageLockPassword ?? '').trim()
-    const normalizedCurrentlyText = String(currentlyText ?? '').trim() || 'currently'
+    const normalizedCurrentlyText = String(currentlyText ?? '').trim() || '当前状态'
     const normalizedEarlierText = String(earlierText ?? '').trim() || '最近的随想录'
-    const normalizedUpdatesText =
-      String(updatesText ?? '').trim() || 'updates every 30 seconds'
     const normalizedAdminText = String(adminText ?? '').trim() || 'admin'
+    const normalizedPageTitle = (
+      String(pageTitle ?? '').trim() || DEFAULT_PAGE_TITLE
+    ).slice(0, PAGE_TITLE_MAX_LEN)
 
     if (!normalizedUserName || !normalizedUserBio || !normalizedAvatarUrl) {
       return NextResponse.json(
@@ -139,11 +144,13 @@ export async function POST(request: NextRequest) {
       await safeSiteConfigUpsert(tx as any, {
         where: { id: 1 },
         update: {
+          pageTitle: normalizedPageTitle,
           userName: normalizedUserName,
           userBio: normalizedUserBio,
           avatarUrl: normalizedAvatarUrl,
           userNote: normalizedUserNote,
           themePreset: normalizedThemePreset,
+          themeCustomSurface: normalizedThemeCustomSurface,
           customCss: normalizedCustomCss,
           historyWindowMinutes: normalizedHistoryWindowMinutes,
           appMessageRules: normalizedAppMessageRules,
@@ -156,16 +163,17 @@ export async function POST(request: NextRequest) {
           pageLockPasswordHash,
           currentlyText: normalizedCurrentlyText,
           earlierText: normalizedEarlierText,
-          updatesText: normalizedUpdatesText,
           adminText: normalizedAdminText,
         },
         create: {
           id: 1,
+          pageTitle: normalizedPageTitle,
           userName: normalizedUserName,
           userBio: normalizedUserBio,
           avatarUrl: normalizedAvatarUrl,
           userNote: normalizedUserNote,
           themePreset: normalizedThemePreset,
+          themeCustomSurface: normalizedThemeCustomSurface,
           customCss: normalizedCustomCss,
           historyWindowMinutes: normalizedHistoryWindowMinutes,
           appMessageRules: normalizedAppMessageRules,
@@ -178,7 +186,6 @@ export async function POST(request: NextRequest) {
           pageLockPasswordHash,
           currentlyText: normalizedCurrentlyText,
           earlierText: normalizedEarlierText,
-          updatesText: normalizedUpdatesText,
           adminText: normalizedAdminText,
         },
       })

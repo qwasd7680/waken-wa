@@ -7,8 +7,12 @@ import { zhCN } from 'date-fns/locale'
 import { Loader2 } from 'lucide-react'
 import type { InspirationHomeItem } from '@/components/inspiration-home-section'
 import { inspirationPlainPreview } from '@/lib/inspiration-preview'
+import { cn } from '@/lib/utils'
 
 const PAGE = 10
+
+const cardShell =
+  'border border-border rounded-lg shadow-sm bg-card/80 backdrop-blur-sm transition-all hover:shadow-md hover:border-primary/20'
 
 export function InspirationArchiveList() {
   const [items, setItems] = useState<InspirationHomeItem[]>([])
@@ -103,37 +107,46 @@ export function InspirationArchiveList() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {items.map((entry) => {
         const href = `/inspiration/${entry.id}`
         const { text: teaser } = inspirationPlainPreview(entry.content, 160)
         return (
-          <article
-            key={entry.id}
-            className="border border-border rounded-md overflow-hidden bg-card/80 backdrop-blur-sm"
-          >
-            {entry.imageDataUrl ? (
-              <Link href={href} className="block border-b border-border/60 bg-muted/30">
-                <img
-                  src={entry.imageDataUrl}
-                  alt=""
-                  className="w-full max-h-44 object-cover object-center"
-                />
-              </Link>
-            ) : null}
-            <div className="p-4 space-y-2">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <Link href={href} className="text-sm font-medium hover:text-primary transition-colors">
-                  {entry.title?.trim() ? entry.title : '（无标题）'}
+          <article key={entry.id} className={`${cardShell} p-2.5 sm:p-3`}>
+            <div className="flex flex-row gap-2 sm:gap-3 items-stretch">
+              {entry.imageDataUrl ? (
+                <Link
+                  href={href}
+                  className={cn(
+                    'group relative block shrink-0 self-start overflow-hidden rounded-lg',
+                    'w-14 h-14 sm:w-16 sm:h-16',
+                    'border border-border/70 bg-card shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.08]',
+                    'transition-[box-shadow,border-color,ring-color] duration-200',
+                    'hover:border-primary/25 hover:shadow-md hover:ring-primary/15',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                  )}
+                >
+                  <img
+                    src={entry.imageDataUrl}
+                    alt=""
+                    className="h-full w-full object-cover object-center transition-transform duration-200 group-hover:scale-[1.04]"
+                  />
                 </Link>
-                <time className="text-xs text-muted-foreground tabular-nums">
-                  {format(new Date(entry.createdAt), 'yyyy-MM-dd HH:mm', { locale: zhCN })}
-                </time>
+              ) : null}
+              <div className="min-w-0 flex-1 flex flex-col gap-1.5">
+                <div className="flex flex-wrap items-baseline justify-between gap-1.5">
+                  <Link href={href} className="text-xs font-semibold hover:text-primary transition-colors">
+                    {entry.title?.trim() ? entry.title : '（无标题）'}
+                  </Link>
+                  <time className="text-[0.65rem] text-muted-foreground tabular-nums shrink-0 leading-none">
+                    {format(new Date(entry.createdAt), 'yyyy-MM-dd HH:mm', { locale: zhCN })}
+                  </time>
+                </div>
+                <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">{teaser}</p>
+                <Link href={href} className="text-xs font-medium text-primary hover:underline w-fit">
+                  打开全文
+                </Link>
               </div>
-              <p className="text-sm text-muted-foreground line-clamp-3">{teaser}</p>
-              <Link href={href} className="text-xs font-medium text-primary hover:underline">
-                打开全文
-              </Link>
             </div>
           </article>
         )
