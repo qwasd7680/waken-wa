@@ -41,6 +41,7 @@ export function isPostgresUrl(s) {
   return t.length > 0 && /^postgres(ql)?:\/\//i.test(t)
 }
 
+/** App / build / generate / push: pooled URL first. */
 export function pickPostgresUrl() {
   const prisma = process.env.POSTGRES_PRISMA_URL?.trim()
   const a = process.env.DATABASE_URL?.trim()
@@ -51,15 +52,32 @@ export function pickPostgresUrl() {
   return null
 }
 
+/** `pnpm db:init` / postinstall: prefer direct (non-pooling) for `db push`. */
+export function pickPostgresUrlForInitDb() {
+  const np = process.env.POSTGRES_URL_NON_POOLING?.trim()
+  const prisma = process.env.POSTGRES_PRISMA_URL?.trim()
+  const a = process.env.DATABASE_URL?.trim()
+  const b = process.env.POSTGRES_URL?.trim()
+  if (isPostgresUrl(np)) return np
+  if (isPostgresUrl(prisma)) return prisma
+  if (isPostgresUrl(a)) return a
+  if (isPostgresUrl(b)) return b
+  return null
+}
+
 /**
  * Loads .env then .env.local (same order as Next). Mutates process.env.DATABASE_URL when using PG.
+ * @param {{ forInitDb?: boolean }} [options] - If true (init-db / postinstall), URL order prefers POSTGRES_URL_NON_POOLING.
  * @returns {{ schemaRel: string, provider: string }}
  */
-export function resolvePrismaEnv() {
+export function resolvePrismaEnv(options = {}) {
+  const forInitDb = options.forInitDb === true
+  const pick = forInitDb ? pickPostgresUrlForInitDb : pickPostgresUrl
+
   loadEnvFile(path.join(repoRoot, '.env'))
   loadEnvFile(path.join(repoRoot, '.env.local'))
 
-  const inferredPostgres = pickPostgresUrl() !== null
+  const inferredPostgres = pick() !== null
   const explicitPostgres = (process.env.DATABASE_PROVIDER || '').toLowerCase() === 'postgresql'
   const provider =
     inferredPostgres || explicitPostgres
@@ -75,10 +93,12 @@ export function resolvePrismaEnv() {
       console.log('[prisma-env] DATABASE_URL unset; using default file:./prisma/dev.db')
     }
   } else {
-    const pgUrl = pickPostgresUrl()
+    const pgUrl = pick()
     if (!pgUrl) {
       throw new Error(
-        'PostgreSQL: set POSTGRES_PRISMA_URL, DATABASE_URL, or POSTGRES_URL (postgres:// or postgresql://...)',
+        forInitDb
+          ? 'PostgreSQL: set POSTGRES_URL_NON_POOLING, POSTGRES_PRISMA_URL, DATABASE_URL, or POSTGRES_URL (postgres:// or postgresql://...)'
+          : 'PostgreSQL: set POSTGRES_PRISMA_URL, DATABASE_URL, or POSTGRES_URL (postgres:// or postgresql://...)',
       )
     }
     process.env.DATABASE_URL = pgUrl

@@ -2,7 +2,7 @@ import { execSync } from 'node:child_process'
 import { resolvePrismaEnv, repoRoot } from './prisma-resolve-env.mjs'
 
 try {
-  const { schemaRel, provider } = resolvePrismaEnv()
+  const { schemaRel, provider } = resolvePrismaEnv({ forInitDb: true })
 
   function run(cmd) {
     execSync(cmd, { stdio: 'inherit', cwd: repoRoot, env: process.env, shell: true })
