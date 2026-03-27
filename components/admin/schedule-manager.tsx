@@ -36,6 +36,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { buildAdminSettingsPatchBody } from '@/lib/admin-settings-patch-body'
 import { exportCoursesToIcs, importIcsToCourses } from '@/lib/schedule-ics'
 import {
+  minIntervalFromGrid,
+  resolveScheduleGridByWeekday,
+  type ScheduleDayGrid,
+} from '@/lib/schedule-grid-by-weekday'
+import {
   expandOccurrencesInWeek,
   getCourseTimeSessions,
   MAX_TIME_SESSIONS_PER_COURSE,
@@ -80,7 +85,9 @@ export function ScheduleManager() {
   const [saving, setSaving] = useState(false)
   const [serverData, setServerData] = useState<Record<string, unknown> | null>(null)
   const [courses, setCourses] = useState<ScheduleCourse[]>([])
-  const [slotMinutes, setSlotMinutes] = useState<number>(30)
+  const [scheduleGridByWeekday, setScheduleGridByWeekday] = useState<ScheduleDayGrid[]>(() =>
+    resolveScheduleGridByWeekday(null, 30),
+  )
   const [icsRaw, setIcsRaw] = useState('')
   const [weekRef, setWeekRef] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }))
 
@@ -110,8 +117,11 @@ export function ScheduleManager() {
       const d = data.data as Record<string, unknown>
       setServerData(d)
       setCourses(Array.isArray(d.scheduleCourses) ? (d.scheduleCourses as ScheduleCourse[]) : [])
-      setSlotMinutes(
-        typeof d.scheduleSlotMinutes === 'number' ? d.scheduleSlotMinutes : 30,
+      setScheduleGridByWeekday(
+        resolveScheduleGridByWeekday(
+          d.scheduleGridByWeekday,
+          typeof d.scheduleSlotMinutes === 'number' ? d.scheduleSlotMinutes : 30,
+        ),
       )
       setIcsRaw(typeof d.scheduleIcs === 'string' ? d.scheduleIcs : '')
       setInClassOnHome(Boolean(d.scheduleInClassOnHome))
@@ -140,6 +150,21 @@ export function ScheduleManager() {
     [courses, weekRef],
   )
 
+  const patchScheduleDay = (index: number, patch: Partial<ScheduleDayGrid>) => {
+    setScheduleGridByWeekday((prev) => {
+      const next = [...prev]
+      next[index] = { ...next[index], ...patch }
+      return next
+    })
+  }
+
+  const copyFirstScheduleDayToWeek = () => {
+    setScheduleGridByWeekday((prev) => {
+      const first = prev[0]
+      return Array.from({ length: 7 }, () => ({ ...first }))
+    })
+  }
+
   const save = async () => {
     if (!serverData) {
       setMessage('尚未加载配置')
@@ -149,7 +174,8 @@ export function ScheduleManager() {
     setMessage('')
     try {
       const body = buildAdminSettingsPatchBody(serverData, {
-        scheduleSlotMinutes: slotMinutes,
+        scheduleSlotMinutes: minIntervalFromGrid(scheduleGridByWeekday),
+        scheduleGridByWeekday,
         scheduleCourses: courses,
         scheduleIcs: icsRaw.length > 0 ? icsRaw : '',
         scheduleInClassOnHome: inClassOnHome,
@@ -397,25 +423,82 @@ export function ScheduleManager() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="space-y-2">
-          <Label>网格刻度（分钟）</Label>
-          <Select
-            value={String(slotMinutes)}
-            onValueChange={(v) => setSlotMinutes(Number(v))}
-          >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SCHEDULE_SLOT_MINUTES_ALLOWED.map((m) => (
-                <SelectItem key={m} value={String(m)}>
-                  {m} 分钟
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="rounded-lg border border-border/60 bg-muted/10 p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-sm font-medium text-foreground">周视图时间轴（每日）</h4>
+          <Button type="button" variant="outline" size="sm" onClick={copyFirstScheduleDayToWeek}>
+            复制周一到整周
+          </Button>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Set display range and tick step for each weekday. With fixed interval, grid lines align to
+          the step; when off, only hourly guide lines are shown. Course blocks always use actual
+          times.
+        </p>
+        <div className="space-y-3">
+          {WEEKDAY_OPTIONS.map((w, i) => {
+            const day = scheduleGridByWeekday[i]
+            if (!day) return null
+            return (
+              <div
+                key={w.value}
+                className="grid gap-2 sm:grid-cols-[minmax(0,4.5rem)_1fr_1fr_auto_auto] sm:items-center"
+              >
+                <span className="text-sm text-foreground">{w.label}</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Label className="text-xs text-muted-foreground shrink-0">起</Label>
+                  <Input
+                    type="time"
+                    step={60}
+                    value={day.rangeStart}
+                    onChange={(e) => patchScheduleDay(i, { rangeStart: e.target.value })}
+                    className="h-9 w-[7rem] font-mono text-sm"
+                  />
+                  <Label className="text-xs text-muted-foreground shrink-0">止</Label>
+                  <Input
+                    type="time"
+                    step={60}
+                    value={day.rangeEnd}
+                    onChange={(e) => patchScheduleDay(i, { rangeEnd: e.target.value })}
+                    className="h-9 w-[7rem] font-mono text-sm"
+                  />
+                </div>
+                <Select
+                  value={String(day.intervalMinutes)}
+                  onValueChange={(v) =>
+                    patchScheduleDay(i, {
+                      intervalMinutes: Number(v) as ScheduleDayGrid['intervalMinutes'],
+                    })
+                  }
+                >
+                  <SelectTrigger className="h-9 w-[120px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SCHEDULE_SLOT_MINUTES_ALLOWED.map((m) => (
+                      <SelectItem key={m} value={String(m)}>
+                        {m} 分钟
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2 sm:justify-end">
+                  <Label htmlFor={`fixed-int-${i}`} className="text-xs font-normal cursor-pointer">
+                    固定间隔
+                  </Label>
+                  <Switch
+                    id={`fixed-int-${i}`}
+                    checked={day.useFixedInterval}
+                    onCheckedChange={(checked) => patchScheduleDay(i, { useFixedInterval: checked })}
+                  />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-4">
         <div className="flex items-center gap-2">
           <Button
             type="button"
@@ -451,7 +534,11 @@ export function ScheduleManager() {
         </div>
       </div>
 
-      <WeekTimetableGrid weekRef={weekRef} slotMinutes={slotMinutes} occurrences={occurrences} />
+      <WeekTimetableGrid
+        weekRef={weekRef}
+        gridByWeekday={scheduleGridByWeekday}
+        occurrences={occurrences}
+      />
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">

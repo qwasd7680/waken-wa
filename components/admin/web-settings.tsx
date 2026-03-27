@@ -37,6 +37,10 @@ import {
   isAllowedSlotMinutes,
   type ScheduleCourse,
 } from '@/lib/schedule-courses'
+import {
+  resolveScheduleGridByWeekday,
+  type ScheduleDayGrid,
+} from '@/lib/schedule-grid-by-weekday'
 
 const CROP_VIEW_SIZE = 320
 const CROP_FRAME_SIZE = 220
@@ -281,9 +285,19 @@ function webPayloadToFormPatch(web: Record<string, unknown>): Partial<SiteConfig
         .filter((item: string) => item.length > 0)
     }
   }
+  let scheduleImportSlot = 30
   if ('scheduleSlotMinutes' in web) {
     const s = Number(web.scheduleSlotMinutes)
-    if (isAllowedSlotMinutes(s)) patch.scheduleSlotMinutes = s
+    if (isAllowedSlotMinutes(s)) {
+      patch.scheduleSlotMinutes = s
+      scheduleImportSlot = s
+    }
+  }
+  if ('scheduleGridByWeekday' in web && Array.isArray(web.scheduleGridByWeekday)) {
+    patch.scheduleGridByWeekday = resolveScheduleGridByWeekday(
+      web.scheduleGridByWeekday,
+      scheduleImportSlot,
+    )
   }
   if ('scheduleCourses' in web && Array.isArray(web.scheduleCourses)) {
     patch.scheduleCourses = web.scheduleCourses as ScheduleCourse[]
@@ -354,6 +368,7 @@ interface SiteConfig {
   inspirationDeviceRestrictionEnabled: boolean
   inspirationAllowedDeviceHashes: string[]
   scheduleSlotMinutes: number
+  scheduleGridByWeekday: ScheduleDayGrid[]
   scheduleCourses: ScheduleCourse[]
   scheduleIcs: string
   scheduleInClassOnHome: boolean
@@ -422,6 +437,7 @@ export function WebSettings() {
     inspirationDeviceRestrictionEnabled: false,
     inspirationAllowedDeviceHashes: [],
     scheduleSlotMinutes: 30,
+    scheduleGridByWeekday: resolveScheduleGridByWeekday(null, 30),
     scheduleCourses: [],
     scheduleIcs: '',
     scheduleInClassOnHome: false,
@@ -498,6 +514,12 @@ export function WebSettings() {
             scheduleSlotMinutes: isAllowedSlotMinutes(Number(data.data.scheduleSlotMinutes))
               ? Number(data.data.scheduleSlotMinutes)
               : 30,
+            scheduleGridByWeekday: resolveScheduleGridByWeekday(
+              data.data.scheduleGridByWeekday,
+              isAllowedSlotMinutes(Number(data.data.scheduleSlotMinutes))
+                ? Number(data.data.scheduleSlotMinutes)
+                : 30,
+            ),
             scheduleCourses: Array.isArray(data.data.scheduleCourses)
               ? (data.data.scheduleCourses as ScheduleCourse[])
               : [],

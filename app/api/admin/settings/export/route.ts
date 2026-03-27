@@ -5,6 +5,7 @@ import {
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { resolveScheduleGridByWeekday } from '@/lib/schedule-grid-by-weekday'
 
 async function requireAdmin() {
   const session = await getSession()
@@ -84,6 +85,10 @@ export async function GET(request: Request) {
             ? null
             : siteConfig.inspirationAllowedDeviceHashes,
         scheduleSlotMinutes: siteConfig.scheduleSlotMinutes ?? 30,
+        scheduleGridByWeekday: resolveScheduleGridByWeekday(
+          siteConfig.scheduleGridByWeekday,
+          siteConfig.scheduleSlotMinutes ?? 30,
+        ),
         scheduleCourses: siteConfig.scheduleCourses ?? [],
         scheduleIcs: siteConfig.scheduleIcs ?? null,
         scheduleInClassOnHome: Boolean(siteConfig.scheduleInClassOnHome),

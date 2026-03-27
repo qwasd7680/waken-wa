@@ -2,6 +2,7 @@ import {
   normalizeHitokotoCategories,
   normalizeHitokotoEncode,
 } from '@/lib/hitokoto'
+import { resolveScheduleGridByWeekday } from '@/lib/schedule-grid-by-weekday'
 
 /**
  * Build JSON body for PATCH /api/admin/settings from a GET response row plus overrides.
@@ -51,6 +52,14 @@ export function buildAdminSettingsPatchBody(
         ? data.scheduleHomeAfterClassesLabel.trim().slice(0, 40)
         : '正在摸鱼',
     globalMouseTiltEnabled: Boolean(data.globalMouseTiltEnabled),
+    scheduleSlotMinutes:
+      typeof data.scheduleSlotMinutes === 'number' ? data.scheduleSlotMinutes : 30,
+    scheduleGridByWeekday: resolveScheduleGridByWeekday(
+      data.scheduleGridByWeekday,
+      typeof data.scheduleSlotMinutes === 'number' ? data.scheduleSlotMinutes : 30,
+    ),
+    scheduleCourses: data.scheduleCourses ?? [],
+    scheduleIcs: typeof data.scheduleIcs === 'string' ? data.scheduleIcs : '',
     ...overrides,
   }
 }

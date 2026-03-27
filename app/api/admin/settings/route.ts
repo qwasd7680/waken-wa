@@ -15,6 +15,11 @@ import {
   MAX_SCHEDULE_ICS_BYTES,
   parseScheduleCoursesJson,
 } from '@/lib/schedule-courses'
+import {
+  defaultScheduleGridByWeekday,
+  minIntervalFromGrid,
+  normalizeScheduleGridByWeekday,
+} from '@/lib/schedule-grid-by-weekday'
 import { normalizeInspirationAllowedHashes } from '@/lib/inspiration-device-allowlist'
 
 const SCHEDULE_HOME_AFTER_CLASSES_LABEL_MAX = 40
@@ -118,7 +123,14 @@ export async function PATCH(request: NextRequest) {
 
     let scheduleSlotMinutes =
       typeof existing?.scheduleSlotMinutes === 'number' ? existing.scheduleSlotMinutes : 30
-    if (body.scheduleSlotMinutes !== undefined && body.scheduleSlotMinutes !== null) {
+    let scheduleGridByWeekday: unknown = existing?.scheduleGridByWeekday ?? null
+
+    const slotInBody =
+      body.scheduleSlotMinutes !== undefined && body.scheduleSlotMinutes !== null
+    const gridInBody =
+      body.scheduleGridByWeekday !== undefined && body.scheduleGridByWeekday !== null
+
+    if (slotInBody) {
       const s = Number(body.scheduleSlotMinutes)
       if (!isAllowedSlotMinutes(s)) {
         return NextResponse.json(
@@ -127,6 +139,20 @@ export async function PATCH(request: NextRequest) {
         )
       }
       scheduleSlotMinutes = s
+    }
+
+    if (gridInBody) {
+      const normalized = normalizeScheduleGridByWeekday(
+        body.scheduleGridByWeekday,
+        scheduleSlotMinutes,
+      )
+      if (!normalized.ok) {
+        return NextResponse.json({ success: false, error: normalized.error }, { status: 400 })
+      }
+      scheduleGridByWeekday = normalized.data
+      scheduleSlotMinutes = minIntervalFromGrid(normalized.data)
+    } else if (slotInBody) {
+      scheduleGridByWeekday = defaultScheduleGridByWeekday(scheduleSlotMinutes)
     }
 
     let scheduleCoursesParsed = parseScheduleCoursesJson(existing?.scheduleCourses ?? null)
@@ -298,6 +324,7 @@ export async function PATCH(request: NextRequest) {
         autoAcceptNewDevices,
         inspirationAllowedDeviceHashes,
         scheduleSlotMinutes,
+        scheduleGridByWeekday,
         scheduleCourses,
         scheduleIcs,
         scheduleInClassOnHome,
@@ -339,6 +366,7 @@ export async function PATCH(request: NextRequest) {
         autoAcceptNewDevices,
         inspirationAllowedDeviceHashes,
         scheduleSlotMinutes,
+        scheduleGridByWeekday,
         scheduleCourses,
         scheduleIcs,
         scheduleInClassOnHome,
