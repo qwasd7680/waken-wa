@@ -86,6 +86,7 @@ export async function getActivityFeedData(limit = 50): Promise<ActivityFeedData>
   const appMessageRules: Array<{ match: string; text: string }> = Array.isArray(config?.appMessageRules)
     ? config.appMessageRules
     : []
+  const appMessageRulesShowProcessName = (config as Record<string, unknown> | null)?.appMessageRulesShowProcessName !== false
   const appBlacklist = parseProcessList(config?.appBlacklist)
   const appWhitelist = parseProcessList(config?.appWhitelist)
   const appFilterModeRaw = String(config?.appFilterMode ?? 'blacklist').trim().toLowerCase()
@@ -171,7 +172,7 @@ export async function getActivityFeedData(limit = 50): Promise<ActivityFeedData>
     const pushMode = getPushModeFromMetadata(item.metadata)
     const maskedTitle = nameOnlySet.has(processKey) ? null : item.processTitle
     const ruleStatusText = applyMessageRule(item.processName, maskedTitle, appMessageRules)
-    // When a message rule matches, only statusText is sent; hide raw processTitle. With no rule, omit statusText and keep processTitle + processName for the client default layout.
+    // When a rule matches: statusText is rule text, optionally ` | processName`; processTitle hidden. No rule: omit statusText, keep processTitle + processName for the client layout.
     const processTitleForClient = ruleStatusText ? null : maskedTitle
     const row: Record<string, unknown> = {
       ...item,
@@ -180,7 +181,9 @@ export async function getActivityFeedData(limit = 50): Promise<ActivityFeedData>
       lastReportAt: (item as any).updatedAt ?? item.startedAt,
     }
     if (ruleStatusText) {
-      row.statusText = ruleStatusText
+      row.statusText = appMessageRulesShowProcessName
+        ? `${ruleStatusText} | ${item.processName}`
+        : ruleStatusText
     }
     activeStatuses.push(redactGeneratedHashKeyForClient(row))
   }
@@ -194,10 +197,20 @@ export async function getActivityFeedData(limit = 50): Promise<ActivityFeedData>
     const processKey = normalizeProcessName(item.processName)
     const maskedTitle = nameOnlySet.has(processKey) ? null : item.processTitle
     const ruleStatusText = applyMessageRule(item.processName, maskedTitle ?? null, appMessageRules)
-    recentTopApps.push({
-      ...item,
-      processTitle: ruleStatusText ? null : maskedTitle,
-    })
+    if (ruleStatusText) {
+      recentTopApps.push({
+        ...item,
+        processTitle: null,
+        statusText: appMessageRulesShowProcessName
+          ? `${ruleStatusText} | ${item.processName}`
+          : ruleStatusText,
+      })
+    } else {
+      recentTopApps.push({
+        ...item,
+        processTitle: maskedTitle,
+      })
+    }
     if (recentTopApps.length >= 3) break
   }
 

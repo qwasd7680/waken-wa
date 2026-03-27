@@ -68,6 +68,7 @@ export async function GET(request: Request) {
         historyWindowMinutes: siteConfig.historyWindowMinutes,
         processStaleSeconds: siteConfig.processStaleSeconds ?? 500,
         appMessageRules: siteConfig.appMessageRules,
+        appMessageRulesShowProcessName: siteConfig.appMessageRulesShowProcessName !== false,
         appBlacklist: siteConfig.appBlacklist,
         appWhitelist: siteConfig.appWhitelist,
         appFilterMode: siteConfig.appFilterMode,
@@ -93,6 +94,7 @@ export async function GET(request: Request) {
           siteConfig.scheduleHomeAfterClassesLabel.trim().length > 0
             ? siteConfig.scheduleHomeAfterClassesLabel.trim().slice(0, 40)
             : '正在摸鱼',
+        globalMouseTiltEnabled: siteConfig.globalMouseTiltEnabled === true,
       },
       token: {
         reportEndpoint: `${baseUrl}/api/activity`,

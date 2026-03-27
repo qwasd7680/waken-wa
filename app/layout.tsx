@@ -48,15 +48,26 @@ export async function generateMetadata(): Promise<Metadata> {
   return { ...staticMetadataBase, title }
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  let globalMouseTiltEnabled = false
+  try {
+    const row = await (prisma as any).siteConfig.findUnique({
+      where: { id: 1 },
+      select: { globalMouseTiltEnabled: true },
+    })
+    globalMouseTiltEnabled = row?.globalMouseTiltEnabled === true
+  } catch {
+    // DB not ready during build or first boot
+  }
+
   return (
     <html lang="zh-CN">
       <body className="font-sans antialiased">
-        <GlobalMouseTilt>{children}</GlobalMouseTilt>
+        <GlobalMouseTilt enabled={globalMouseTiltEnabled}>{children}</GlobalMouseTilt>
         <div id="site-footer-portal" />
         <Analytics />
       </body>

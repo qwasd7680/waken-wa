@@ -11,7 +11,14 @@ const LERP = 0.12
 
 const ADMIN_PREFIX = '/admin'
 
-export function GlobalMouseTilt({ children }: { children: React.ReactNode }) {
+export function GlobalMouseTilt({
+  children,
+  enabled,
+}: {
+  children: React.ReactNode
+  /** When false, no tilt (default in site config). */
+  enabled: boolean
+}) {
   const pathname = usePathname()
   const wrapRef = useRef<HTMLDivElement>(null)
   const targetRef = useRef({ rx: 0, ry: 0 })
@@ -24,7 +31,7 @@ export function GlobalMouseTilt({ children }: { children: React.ReactNode }) {
     const el = wrapRef.current
     if (!el) return
 
-    if (skipAdmin) {
+    if (skipAdmin || !enabled) {
       el.style.transform = ''
       el.style.willChange = 'auto'
       currentRef.current = { rx: 0, ry: 0 }
@@ -77,7 +84,7 @@ export function GlobalMouseTilt({ children }: { children: React.ReactNode }) {
       currentRef.current = { rx: 0, ry: 0 }
       targetRef.current = { rx: 0, ry: 0 }
     }
-  }, [skipAdmin])
+  }, [skipAdmin, enabled])
 
   return (
     <div

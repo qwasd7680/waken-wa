@@ -86,7 +86,11 @@ export function ActivityTimeline() {
                     {!activity.endedAt && (
                       <div className="w-1.5 h-1.5 rounded-full bg-online animate-pulse flex-shrink-0"></div>
                     )}
-                    <span className="text-sm text-foreground">{activity.processName}</span>
+                    <span className="text-sm text-foreground">
+                      {typeof activity.statusText === 'string' && activity.statusText.trim()
+                        ? activity.statusText.trim()
+                        : activity.processName}
+                    </span>
                   </div>
 
                   {activity.processTitle && (

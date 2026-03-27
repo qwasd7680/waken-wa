@@ -80,6 +80,8 @@ model SiteConfig {
   customCss            String?  @map("custom_css")
   historyWindowMinutes Int      @map("history_window_minutes") @default(120)
   appMessageRules      Json?    @map("app_message_rules")
+  /// When a rule matches: append ` | processName` to status line (default on).
+  appMessageRulesShowProcessName Boolean @map("app_message_rules_show_process_name") @default(true)
   appBlacklist         Json?    @map("app_blacklist")
   appWhitelist         Json?    @map("app_whitelist")
   appFilterMode        String   @map("app_filter_mode") @default("blacklist")
@@ -101,6 +103,8 @@ model SiteConfig {
   scheduleHomeShowTeacher   Boolean  @map("schedule_home_show_teacher") @default(false)
   /** Home schedule card left label when all of today’s sessions have ended. */
   scheduleHomeAfterClassesLabel String @map("schedule_home_after_classes_label") @default("正在摸鱼")
+  /// Whole-page mouse parallax tilt (GlobalMouseTilt in root layout). Default off.
+  globalMouseTiltEnabled Boolean @map("global_mouse_tilt_enabled") @default(false)
   hcaptchaEnabled      Boolean  @map("hcaptcha_enabled") @default(false)
   hcaptchaSiteKey      String?  @map("hcaptcha_site_key")
   hcaptchaSecretKey    String?  @map("hcaptcha_secret_key")

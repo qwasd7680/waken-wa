@@ -245,6 +245,9 @@ function webPayloadToFormPatch(web: Record<string, unknown>): Partial<SiteConfig
     }
   }
   if ('appMessageRules' in web) patch.appMessageRules = normalizeRulesImport(web.appMessageRules)
+  if ('appMessageRulesShowProcessName' in web && typeof web.appMessageRulesShowProcessName === 'boolean') {
+    patch.appMessageRulesShowProcessName = web.appMessageRulesShowProcessName
+  }
   if ('appBlacklist' in web) patch.appBlacklist = normalizeStringListImport(web.appBlacklist)
   if ('appWhitelist' in web) patch.appWhitelist = normalizeStringListImport(web.appWhitelist)
   if ('appFilterMode' in web) {
@@ -306,6 +309,9 @@ function webPayloadToFormPatch(web: Record<string, unknown>): Partial<SiteConfig
     const t = web.scheduleHomeAfterClassesLabel.trim()
     patch.scheduleHomeAfterClassesLabel = (t.length > 0 ? t : '正在摸鱼').slice(0, 40)
   }
+  if ('globalMouseTiltEnabled' in web && typeof web.globalMouseTiltEnabled === 'boolean') {
+    patch.globalMouseTiltEnabled = web.globalMouseTiltEnabled
+  }
   return patch
 }
 
@@ -324,6 +330,7 @@ interface SiteConfig {
   historyWindowMinutes: number
   processStaleSeconds: number
   appMessageRules: Array<{ match: string; text: string }>
+  appMessageRulesShowProcessName: boolean
   appFilterMode: 'blacklist' | 'whitelist'
   appBlacklist: string[]
   appWhitelist: string[]
@@ -347,6 +354,7 @@ interface SiteConfig {
   scheduleHomeShowLocation: boolean
   scheduleHomeShowTeacher: boolean
   scheduleHomeAfterClassesLabel: string
+  globalMouseTiltEnabled: boolean
 }
 
 export function WebSettings() {
@@ -390,6 +398,7 @@ export function WebSettings() {
     historyWindowMinutes: 120,
     processStaleSeconds: 500,
     appMessageRules: [],
+    appMessageRulesShowProcessName: true,
     appFilterMode: 'blacklist',
     appBlacklist: [],
     appWhitelist: [],
@@ -412,6 +421,7 @@ export function WebSettings() {
     scheduleHomeShowLocation: false,
     scheduleHomeShowTeacher: false,
     scheduleHomeAfterClassesLabel: '正在摸鱼',
+    globalMouseTiltEnabled: false,
   })
 
   useEffect(() => {
@@ -455,6 +465,7 @@ export function WebSettings() {
             historyWindowMinutes: Number(data.data.historyWindowMinutes ?? 120),
             processStaleSeconds: Number(data.data.processStaleSeconds ?? 500),
             appMessageRules: rules,
+            appMessageRulesShowProcessName: data.data.appMessageRulesShowProcessName !== false,
             appFilterMode,
             appBlacklist: blacklist,
             appWhitelist: whitelist,
@@ -491,6 +502,7 @@ export function WebSettings() {
               data.data.scheduleHomeAfterClassesLabel.trim().length > 0
                 ? data.data.scheduleHomeAfterClassesLabel.trim().slice(0, 40)
                 : '正在摸鱼',
+            globalMouseTiltEnabled: data.data.globalMouseTiltEnabled === true,
           })
         }
       } finally {
@@ -1040,6 +1052,23 @@ export function WebSettings() {
         </p>
       </div>
 
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/10 px-4 py-3">
+        <div className="space-y-0.5 min-w-0">
+          <Label htmlFor="global-mouse-tilt" className="font-normal cursor-pointer">
+            全站页面视差倾斜
+          </Label>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            开启后整页随鼠标轻微 3D 倾斜；默认关闭。后台路由不受此影响；系统「减少动效」时自动不启用。
+          </p>
+        </div>
+        <Switch
+          id="global-mouse-tilt"
+          checked={form.globalMouseTiltEnabled}
+          onCheckedChange={(v) => patch('globalMouseTiltEnabled', v)}
+          className="shrink-0"
+        />
+      </div>
+
       <div className="space-y-2">
         <Label>头像地址（URL / DataURL）</Label>
         <Input value={form.avatarUrl} onChange={(e) => patch('avatarUrl', e.target.value)} />
@@ -1273,14 +1302,32 @@ export function WebSettings() {
         )}
       </div>
 
-      <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-card/40 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <Label className="text-base">应用匹配文案规则</Label>
-          <p className="text-xs text-muted-foreground">已保存 {rulesTotal} 条</p>
+      <div className="flex flex-col gap-4 rounded-lg border border-border/60 bg-card/40 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <Label className="text-base">应用匹配文案规则</Label>
+            <p className="text-xs text-muted-foreground">已保存 {rulesTotal} 条</p>
+          </div>
+          <Button type="button" variant="secondary" className="shrink-0" onClick={() => setDialogAppRulesOpen(true)}>
+            在弹窗中编辑
+          </Button>
         </div>
-        <Button type="button" variant="secondary" className="shrink-0" onClick={() => setDialogAppRulesOpen(true)}>
-          在弹窗中编辑
-        </Button>
+        <div className="flex items-center justify-between gap-3 rounded-md border border-border/50 bg-background/40 px-3 py-2.5">
+          <div className="space-y-0.5 min-w-0">
+            <Label htmlFor="app-rule-show-process" className="font-normal cursor-pointer">
+              命中规则时显示进程名
+            </Label>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              开启后为「文案 | 进程名」；关闭则仅显示规则文案（仍隐藏原标题）。
+            </p>
+          </div>
+          <Switch
+            id="app-rule-show-process"
+            checked={form.appMessageRulesShowProcessName}
+            onCheckedChange={(v) => patch('appMessageRulesShowProcessName', v)}
+            className="shrink-0"
+          />
+        </div>
       </div>
 
       <Dialog open={dialogAppRulesOpen} onOpenChange={setDialogAppRulesOpen}>

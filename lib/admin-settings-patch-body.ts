@@ -27,6 +27,7 @@ export function buildAdminSettingsPatchBody(
     historyWindowMinutes: data.historyWindowMinutes ?? 120,
     processStaleSeconds: data.processStaleSeconds ?? 500,
     appMessageRules: data.appMessageRules ?? [],
+    appMessageRulesShowProcessName: (data as Record<string, unknown>).appMessageRulesShowProcessName !== false,
     appBlacklist: data.appBlacklist ?? [],
     appWhitelist: data.appWhitelist ?? [],
     appFilterMode: data.appFilterMode ?? 'blacklist',
@@ -48,6 +49,7 @@ export function buildAdminSettingsPatchBody(
       data.scheduleHomeAfterClassesLabel.trim().length > 0
         ? data.scheduleHomeAfterClassesLabel.trim().slice(0, 40)
         : '正在摸鱼',
+    globalMouseTiltEnabled: Boolean(data.globalMouseTiltEnabled),
     ...overrides,
   }
 }

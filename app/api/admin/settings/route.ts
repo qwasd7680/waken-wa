@@ -188,6 +188,14 @@ export async function PATCH(request: NextRequest) {
       ).slice(0, SCHEDULE_HOME_AFTER_CLASSES_LABEL_MAX)
     }
 
+    let appMessageRulesShowProcessName = existing?.appMessageRulesShowProcessName !== false
+    if (
+      body.appMessageRulesShowProcessName !== undefined &&
+      body.appMessageRulesShowProcessName !== null
+    ) {
+      appMessageRulesShowProcessName = Boolean(body.appMessageRulesShowProcessName)
+    }
+
     let userNoteHitokotoEnabled = Boolean(existing?.userNoteHitokotoEnabled)
     if (body.userNoteHitokotoEnabled !== undefined && body.userNoteHitokotoEnabled !== null) {
       userNoteHitokotoEnabled = Boolean(body.userNoteHitokotoEnabled)
@@ -248,6 +256,11 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    let globalMouseTiltEnabled = existing?.globalMouseTiltEnabled === true
+    if (body.globalMouseTiltEnabled !== undefined && body.globalMouseTiltEnabled !== null) {
+      globalMouseTiltEnabled = Boolean(body.globalMouseTiltEnabled)
+    }
+
     const config = await safeSiteConfigUpsert(prisma as any, {
       where: { id: 1 },
       update: {
@@ -264,6 +277,7 @@ export async function PATCH(request: NextRequest) {
         customCss,
         historyWindowMinutes,
         appMessageRules,
+        appMessageRulesShowProcessName,
         appBlacklist,
         appWhitelist,
         appFilterMode,
@@ -283,6 +297,7 @@ export async function PATCH(request: NextRequest) {
         scheduleHomeShowLocation,
         scheduleHomeShowTeacher,
         scheduleHomeAfterClassesLabel,
+        globalMouseTiltEnabled,
         hcaptchaEnabled,
         hcaptchaSiteKey,
         hcaptchaSecretKey,
@@ -302,6 +317,7 @@ export async function PATCH(request: NextRequest) {
         customCss,
         historyWindowMinutes,
         appMessageRules,
+        appMessageRulesShowProcessName,
         appBlacklist,
         appWhitelist,
         appFilterMode,
@@ -321,6 +337,7 @@ export async function PATCH(request: NextRequest) {
         scheduleHomeShowLocation,
         scheduleHomeShowTeacher,
         scheduleHomeAfterClassesLabel,
+        globalMouseTiltEnabled,
         hcaptchaEnabled,
         hcaptchaSiteKey,
         hcaptchaSecretKey,
