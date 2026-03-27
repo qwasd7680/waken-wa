@@ -2,12 +2,16 @@ import { randomBytes } from 'node:crypto'
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 import bcrypt from 'bcryptjs'
+import { findActiveApiTokenBySecret, resolveActiveApiTokenFromPlainSecret } from '@/lib/api-token-secret'
 import prisma from './prisma'
 
 let cachedJwtSecret: Uint8Array | null = null
-let loggedDevEphemeralWarning = false
+let loggedEphemeralJwtWarning = false
 
-/** HS256 key: env in all environments when set; otherwise ephemeral random bytes in non-production only. */
+/**
+ * HS256 key: use JWT_SECRET when set; otherwise 32 random bytes for this Node process only.
+ * Ephemeral mode: sessions break after restart/redeploy; multiple instances do not share the same key unless JWT_SECRET is set.
+ */
 function getJwtSecretBytes(): Uint8Array {
   if (cachedJwtSecret) {
     return cachedJwtSecret
@@ -19,18 +23,15 @@ function getJwtSecretBytes(): Uint8Array {
     return cachedJwtSecret
   }
 
-  if (process.env.NODE_ENV === 'production') {
-    console.error(
-      '[auth] JWT_SECRET is required in production. Set a long random value in the environment.',
-    )
-    throw new Error('JWT_SECRET is required in production')
-  }
-
-  if (!loggedDevEphemeralWarning) {
-    loggedDevEphemeralWarning = true
-    console.warn(
-      '[auth] WARN: JWT_SECRET is not set. Using an ephemeral secret for this Node process only (sessions reset on restart). Set JWT_SECRET in .env for stable local sessions.',
-    )
+  if (!loggedEphemeralJwtWarning) {
+    loggedEphemeralJwtWarning = true
+    const msg =
+      '[auth] JWT_SECRET is not set. Using an ephemeral per-process secret (sessions reset on restart; set JWT_SECRET for stable sessions and for multiple app instances).'
+    if (process.env.NODE_ENV === 'production') {
+      console.error(msg)
+    } else {
+      console.warn(msg)
+    }
   }
 
   cachedJwtSecret = randomBytes(32)
@@ -99,10 +100,8 @@ export async function getSession(): Promise<SessionPayload | null> {
 }
 
 export async function validateApiToken(token: string): Promise<boolean> {
-  const result = await prisma.apiToken.findFirst({
-    where: { token, isActive: true }
-  })
-  return result !== null
+  const row = await findActiveApiTokenBySecret(token)
+  return row !== null
 }
 
 /** Validates Bearer token and returns token id (updates lastUsedAt). For inspiration device allowlist. */
@@ -110,16 +109,8 @@ export async function getBearerApiTokenRecord(
   authHeader: string | null,
 ): Promise<{ id: number } | null> {
   if (!authHeader?.startsWith('Bearer ')) return null
-  const token = authHeader.slice(7)
-  const result = await prisma.apiToken.findFirst({
-    where: { token, isActive: true },
-  })
-  if (!result) return null
-  await prisma.apiToken.update({
-    where: { id: result.id },
-    data: { lastUsedAt: new Date() },
-  })
-  return { id: result.id }
+  const secret = authHeader.slice(7)
+  return resolveActiveApiTokenFromPlainSecret(secret)
 }
 
 export async function authenticateAdmin(

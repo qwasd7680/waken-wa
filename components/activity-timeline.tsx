@@ -58,7 +58,9 @@ export function ActivityTimeline() {
       <div className="space-y-2">
         {activities.map((activity) => {
           const batteryLabel = getBatteryLabel(activity.metadata)
-          const deviceName = activity.device || `device-${activity.generatedHashKey?.slice(0, 8)}`
+          const deviceName =
+            activity.device ||
+            (activity.deviceId != null ? `device #${activity.deviceId}` : `activity #${activity.id}`)
           const deviceType = getDeviceType(deviceName, activity.metadata)
           const duration = activity.endedAt
             ? Math.round(

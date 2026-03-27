@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 
 interface ActivityItem {
   id: number
-  generatedHashKey: string
+  deviceId?: number | null
   device: string
   processName: string
   processTitle: string | null

@@ -9,6 +9,12 @@ export interface ActivityFeedData {
   generatedAt: string
 }
 
+/** Strip device identity secret before JSON to browser (SSE / homepage). */
+export function redactGeneratedHashKeyForClient(row: Record<string, unknown>): Record<string, unknown> {
+  const { generatedHashKey: _omit, ...rest } = row
+  return rest
+}
+
 function normalizeProcessName(value: string): string {
   return value.trim().toLowerCase()
 }
@@ -144,11 +150,13 @@ export async function getActivityFeedData(limit = 50): Promise<ActivityFeedData>
   })
   const recentActivities = recentActivitiesRaw
     .filter((item) => passesAppFilter(item.processName))
-    .map((item) =>
-      nameOnlySet.has(normalizeProcessName(item.processName))
-        ? { ...item, processTitle: null }
-        : item
-    )
+    .map((item) => {
+      const shaped =
+        nameOnlySet.has(normalizeProcessName(item.processName))
+          ? { ...item, processTitle: null }
+          : { ...item }
+      return redactGeneratedHashKeyForClient(shaped as Record<string, unknown>)
+    })
 
   // Keep latest active entry for each device
   const activeStatuses: any[] = []
@@ -162,20 +170,22 @@ export async function getActivityFeedData(limit = 50): Promise<ActivityFeedData>
     seen.add(key)
     const pushMode = getPushModeFromMetadata(item.metadata)
     const maskedTitle = nameOnlySet.has(processKey) ? null : item.processTitle
-    activeStatuses.push({
-      ...item,
-      processTitle: maskedTitle,
-      pushMode,
-      lastReportAt: (item as any).updatedAt ?? item.startedAt,
-      statusText:
-        applyMessageRule(item.processName, maskedTitle, appMessageRules) ||
-        `正在使用 ${item.processName}${maskedTitle ? ` — ${maskedTitle}` : ''}`,
-    })
+    activeStatuses.push(
+      redactGeneratedHashKeyForClient({
+        ...item,
+        processTitle: maskedTitle,
+        pushMode,
+        lastReportAt: (item as any).updatedAt ?? item.startedAt,
+        statusText:
+          applyMessageRule(item.processName, maskedTitle, appMessageRules) ||
+          `正在使用 ${item.processName}${maskedTitle ? ` — ${maskedTitle}` : ''}`,
+      } as Record<string, unknown>),
+    )
   }
 
   const recentTopApps: any[] = []
   const seenProcess = new Set<string>()
-  for (const item of recentActivities) {
+  for (const item of recentActivities as Array<{ processName: string }>) {
     const key = item.processName.toLowerCase()
     if (seenProcess.has(key)) continue
     seenProcess.add(key)

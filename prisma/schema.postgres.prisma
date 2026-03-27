@@ -23,7 +23,8 @@ model AdminUser {
 model ApiToken {
   id         Int       @id @default(autoincrement())
   name       String    @db.VarChar(200)
-  token      String    @unique @db.VarChar(64)
+  /// `h$` + SHA-256 hex (66 chars); legacy plaintext up to 64 hex.
+  token      String    @unique @db.VarChar(128)
   isActive   Boolean   @default(true) @map("is_active")
   createdAt  DateTime  @default(now()) @map("created_at")
   lastUsedAt DateTime? @map("last_used_at")

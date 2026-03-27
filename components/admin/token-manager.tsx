@@ -72,6 +72,7 @@ export function TokenManager() {
   const [qrTitle, setQrTitle] = useState('')
   const [qrEndpoint, setQrEndpoint] = useState('')
   const [qrEncoded, setQrEncoded] = useState('')
+  const [qrError, setQrError] = useState('')
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(total / TOKEN_LIST_PAGE_SIZE)),
@@ -189,6 +190,7 @@ export function TokenManager() {
 
   const openTokenQr = async (token: ApiToken) => {
     setQrLoading(true)
+    setQrError('')
     setQrTitle(token.name)
     setQrEndpoint('')
     setQrEncoded('')
@@ -196,13 +198,22 @@ export function TokenManager() {
     try {
       const res = await fetch(`/api/admin/tokens?bundle_id=${token.id}`)
       const data = await res.json()
+      if (res.status === 410) {
+        setQrError(
+          typeof data?.error === 'string'
+            ? data.error
+            : '无法再次导出明文密钥，请使用创建时保存的配置或新建 Token。',
+        )
+        return
+      }
       if (!res.ok || !data?.success || !data?.data?.encoded) {
+        setQrError(data?.error || '获取接入配置失败')
         return
       }
       setQrEndpoint(String(data.data.endpoint || ''))
       setQrEncoded(String(data.data.encoded || ''))
     } catch {
-      // ignore
+      setQrError('网络错误')
     } finally {
       setQrLoading(false)
     }
@@ -492,18 +503,27 @@ export function TokenManager() {
         ) : null}
       </div>
 
-      <Dialog open={qrDialogOpen} onOpenChange={setQrDialogOpen}>
+      <Dialog
+        open={qrDialogOpen}
+        onOpenChange={(open) => {
+          setQrDialogOpen(open)
+          if (!open) setQrError('')
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>接入二维码</DialogTitle>
             <DialogDescription>
-              扫码可获取该 Token 的 Base64 接入配置。
+              扫码可获取该 Token 的 Base64 接入配置（仅当库中仍保留明文时可用；新 Token 仅存 SHA-256 摘要）。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm">
               Token: <span className="font-medium">{qrTitle || '-'}</span>
             </p>
+            {qrError ? (
+              <p className="text-sm text-destructive">{qrError}</p>
+            ) : null}
             {qrEndpoint && (
               <p className="text-xs text-muted-foreground break-all">Endpoint: {qrEndpoint}</p>
             )}
@@ -520,7 +540,9 @@ export function TokenManager() {
                   className="h-[260px] w-[260px]"
                 />
               ) : (
-                <div className="text-sm text-muted-foreground">暂无二维码数据</div>
+                <div className="text-sm text-muted-foreground">
+                  {qrError ? '无法生成二维码' : '暂无二维码数据'}
+                </div>
               )}
             </div>
             {qrEncoded && (

@@ -1,34 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveActiveApiTokenFromPlainSecret } from '@/lib/api-token-secret'
 import { getSession } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { getActivityFeedData, getHistoryWindowMinutes } from '@/lib/activity-feed'
+import {
+  getActivityFeedData,
+  getHistoryWindowMinutes,
+  redactGeneratedHashKeyForClient,
+} from '@/lib/activity-feed'
 import { Prisma } from '@prisma/client'
 
 // 强制动态渲染，禁用缓存
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-// 验证 API Token
 async function validateToken(request: NextRequest): Promise<{ id: number } | null> {
   const authHeader = request.headers.get('authorization')
   if (!authHeader?.startsWith('Bearer ')) {
     return null
   }
-  
-  const token = authHeader.slice(7)
-  const result = await prisma.apiToken.findFirst({
-    where: { token, isActive: true }
-  })
-  
-  if (result) {
-    // 更新最后使用时间
-    await prisma.apiToken.update({
-      where: { id: result.id },
-      data: { lastUsedAt: new Date() }
-    })
-  }
-  
-  return result ? { id: result.id } : null
+  return resolveActiveApiTokenFromPlainSecret(authHeader.slice(7))
 }
 
 // GET - activity log listing (admin session only; home page uses /api/activity/stream)
@@ -62,11 +52,15 @@ export async function GET(request: NextRequest) {
 
     const feed = await getActivityFeedData(limit)
 
+    const logsPublic = logs.map((row: Record<string, unknown>) =>
+      redactGeneratedHashKeyForClient({ ...row }),
+    )
+
     return NextResponse.json({
       success: true,
-      data: logs,
+      data: logsPublic,
       pagination: { limit, offset, total },
-      feed
+      feed,
     })
   } catch (error) {
     console.error('获取活动日志失败:', error)

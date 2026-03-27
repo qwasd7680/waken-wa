@@ -46,12 +46,12 @@ export async function GET() {
           )
         } catch (error) {
           if (closed) return
+          console.error('[activity stream] push failed:', error)
           safeEnqueue(
             encoder.encode(
               toSseEvent('error', {
                 success: false,
                 error: 'stream update failed',
-                detail: String(error),
               })
             )
           )

@@ -2,6 +2,7 @@ import {
   normalizeHitokotoCategories,
   normalizeHitokotoEncode,
 } from '@/lib/hitokoto'
+import { isStoredApiTokenHashed } from '@/lib/api-token-secret'
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import prisma from '@/lib/prisma'
@@ -95,7 +96,14 @@ export async function GET(request: Request) {
       },
       token: {
         reportEndpoint: `${baseUrl}/api/activity`,
-        items: tokens,
+        items: tokens.map((t) => ({
+          id: t.id,
+          name: t.name,
+          isActive: t.isActive,
+          createdAt: t.createdAt,
+          lastUsedAt: t.lastUsedAt,
+          token: isStoredApiTokenHashed(t.token) ? null : t.token,
+        })),
       },
     }
 

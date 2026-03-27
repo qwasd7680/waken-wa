@@ -61,13 +61,15 @@ export function CurrentStatus() {
       {statuses.map((activity) => {
         const timestampFormat = 'MM/dd HH:mm:ss'
         const batteryLabel = getBatteryLabel(activity.metadata)
-        const deviceName = activity.device || `device-${activity.generatedHashKey?.slice(0, 8)}`
+        const deviceName =
+          activity.device ||
+          (activity.deviceId != null ? `device #${activity.deviceId}` : `activity #${activity.id}`)
         const deviceType = getDeviceType(deviceName, activity.metadata)
         const lastReportAt = activity.lastReportAt || activity.updatedAt || activity.startedAt
 
         return (
           <div
-            key={`${activity.generatedHashKey}-${activity.id}`}
+            key={`${activity.deviceId ?? 'na'}-${activity.id}`}
             className="border border-border rounded-lg shadow-sm p-5 sm:p-6 bg-card transition-all hover:shadow-md hover:border-primary/25"
           >
             <div className="space-y-4">

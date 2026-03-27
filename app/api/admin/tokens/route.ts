@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
+import { isStoredApiTokenHashed, storedFormFromPlainSecret } from '@/lib/api-token-secret'
 import { getSession } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
@@ -31,6 +32,17 @@ export async function GET(request: NextRequest) {
       })
       if (!tokenRecord) {
         return NextResponse.json({ success: false, error: 'Token 不存在' }, { status: 404 })
+      }
+
+      if (isStoredApiTokenHashed(tokenRecord.token)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              '该 Token 仅保存 SHA-256 摘要，无法再次导出明文。请使用创建时保存的密钥，或新建 Token。',
+          },
+          { status: 410 },
+        )
       }
 
       const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost:3000'
@@ -157,12 +169,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: '请输入名称' }, { status: 400 })
     }
     
-    const token = crypto.randomBytes(32).toString('hex')
-    
+    const plainToken = crypto.randomBytes(32).toString('hex')
+    const storedToken = storedFormFromPlainSecret(plainToken)
+
     const result = await prisma.apiToken.create({
-      data: { name, token, isActive: true }
+      data: { name, token: storedToken, isActive: true },
     })
-    
+
     const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost:3000'
     const proto = request.headers.get('x-forwarded-proto') || 'http'
     const endpoint = `${proto}://${host}/api/activity`
@@ -170,16 +183,21 @@ export async function POST(request: NextRequest) {
       JSON.stringify({
         version: 1,
         endpoint,
-        apiKey: result.token,
+        apiKey: plainToken,
         tokenName: result.name,
       }),
       'utf8'
     ).toString('base64')
 
-    // 返回完整 token（仅创建时可见）
+    // Plain secret only in this response; DB holds h$ + sha256(plain).
     return NextResponse.json(
-      { success: true, data: result, tokenBundleBase64: tokenBundle, endpoint },
-      { status: 201 }
+      {
+        success: true,
+        data: { ...result, token: plainToken },
+        tokenBundleBase64: tokenBundle,
+        endpoint,
+      },
+      { status: 201 },
     )
   } catch (error) {
     console.error('创建 Token 失败:', error)
