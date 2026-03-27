@@ -7,7 +7,7 @@ import { cookies } from 'next/headers'
 import { verifySiteLockSession } from '@/lib/auth'
 import { SiteLockForm } from '@/components/site-lock-form'
 import { getThemePresetCss } from '@/lib/theme-css'
-import { LayoutFooter } from '@/components/layout-footer'
+import { LayoutFooterPortal } from '@/components/layout-footer-portal'
 import { ContentReadingPanel } from '@/components/content-reading-panel'
 import { ScheduleHomeInClassBanner } from '@/components/schedule-home-in-class-banner'
 import {
@@ -163,9 +163,9 @@ export default async function Home() {
             </section>
           </ContentReadingPanel>
         </div>
-
-        <LayoutFooter adminText={adminText} />
       </main>
+
+      <LayoutFooterPortal adminText={adminText} />
     </>
   )
 }

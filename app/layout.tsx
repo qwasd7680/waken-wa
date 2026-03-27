@@ -3,6 +3,7 @@ import { Noto_Sans_SC, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import prisma from '@/lib/prisma'
 import { DEFAULT_PAGE_TITLE, PAGE_TITLE_MAX_LEN } from '@/lib/default-page-title'
+import { GlobalMouseTilt } from '@/components/global-mouse-tilt'
 import './globals.css'
 
 const _notoSansSC = Noto_Sans_SC({ subsets: ["latin"], weight: ["300", "400", "500"] });
@@ -55,7 +56,8 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body className="font-sans antialiased">
-        {children}
+        <GlobalMouseTilt>{children}</GlobalMouseTilt>
+        <div id="site-footer-portal" />
         <Analytics />
       </body>
     </html>

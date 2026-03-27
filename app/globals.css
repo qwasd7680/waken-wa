@@ -158,8 +158,13 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* 3D tilt (GlobalMouseTilt) expands painted bounds; clip horizontal overflow on the scroll viewport */
+  html {
+    overflow-x: hidden;
+  }
   body {
     @apply bg-background text-foreground;
+    overflow-x: hidden;
   }
 }
 
