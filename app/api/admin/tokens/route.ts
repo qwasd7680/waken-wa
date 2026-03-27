@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { isStoredApiTokenHashed, storedFormFromPlainSecret } from '@/lib/api-token-secret'
+import { storedFormFromPlainSecret } from '@/lib/api-token-secret'
 import { getSession } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
@@ -10,7 +10,7 @@ async function requireAdmin() {
   return session
 }
 
-// GET - 获取所有 API Token / 指定 Token 接入配置
+// GET - list API tokens (masked); plaintext secret is only returned once on POST create.
 export async function GET(request: NextRequest) {
   const session = await requireAdmin()
   if (!session) {
@@ -19,56 +19,6 @@ export async function GET(request: NextRequest) {
   
   try {
     const { searchParams } = new URL(request.url)
-    const bundleId = searchParams.get('bundle_id')
-
-    if (bundleId) {
-      const id = parseInt(bundleId, 10)
-      if (!Number.isFinite(id) || id <= 0) {
-        return NextResponse.json({ success: false, error: '无效的 Token ID' }, { status: 400 })
-      }
-
-      const tokenRecord = await prisma.apiToken.findUnique({
-        where: { id }
-      })
-      if (!tokenRecord) {
-        return NextResponse.json({ success: false, error: 'Token 不存在' }, { status: 404 })
-      }
-
-      if (isStoredApiTokenHashed(tokenRecord.token)) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              '该 Token 仅保存 SHA-256 摘要，无法再次导出明文。请使用创建时保存的密钥，或新建 Token。',
-          },
-          { status: 410 },
-        )
-      }
-
-      const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost:3000'
-      const proto = request.headers.get('x-forwarded-proto') || 'http'
-      const endpoint = `${proto}://${host}/api/activity`
-      const encoded = Buffer.from(
-        JSON.stringify({
-          version: 1,
-          endpoint,
-          apiKey: tokenRecord.token,
-          tokenName: tokenRecord.name,
-        }),
-        'utf8'
-      ).toString('base64')
-
-      return NextResponse.json({
-        success: true,
-        data: {
-          id: tokenRecord.id,
-          name: tokenRecord.name,
-          endpoint,
-          encoded,
-        },
-      })
-    }
-
     const rawLimit = searchParams.get('limit')
     const usePagination = rawLimit !== null && rawLimit !== ''
 

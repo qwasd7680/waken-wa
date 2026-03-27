@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { format } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
-import { Plus, Trash2, Copy, Check, QrCode, Loader2 } from 'lucide-react'
+import { Plus, Trash2, Copy, Check, QrCode } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -68,11 +68,9 @@ export function TokenManager() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [qrDialogOpen, setQrDialogOpen] = useState(false)
-  const [qrLoading, setQrLoading] = useState(false)
   const [qrTitle, setQrTitle] = useState('')
   const [qrEndpoint, setQrEndpoint] = useState('')
   const [qrEncoded, setQrEncoded] = useState('')
-  const [qrError, setQrError] = useState('')
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(total / TOKEN_LIST_PAGE_SIZE)),
@@ -185,37 +183,6 @@ export function TokenManager() {
     if (copyFeedbackTimerRef.current) {
       clearTimeout(copyFeedbackTimerRef.current)
       copyFeedbackTimerRef.current = null
-    }
-  }
-
-  const openTokenQr = async (token: ApiToken) => {
-    setQrLoading(true)
-    setQrError('')
-    setQrTitle(token.name)
-    setQrEndpoint('')
-    setQrEncoded('')
-    setQrDialogOpen(true)
-    try {
-      const res = await fetch(`/api/admin/tokens?bundle_id=${token.id}`)
-      const data = await res.json()
-      if (res.status === 410) {
-        setQrError(
-          typeof data?.error === 'string'
-            ? data.error
-            : '无法再次导出明文密钥，请使用创建时保存的配置或新建 Token。',
-        )
-        return
-      }
-      if (!res.ok || !data?.success || !data?.data?.encoded) {
-        setQrError(data?.error || '获取接入配置失败')
-        return
-      }
-      setQrEndpoint(String(data.data.endpoint || ''))
-      setQrEncoded(String(data.data.encoded || ''))
-    } catch {
-      setQrError('网络错误')
-    } finally {
-      setQrLoading(false)
     }
   }
 
@@ -374,15 +341,6 @@ export function TokenManager() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base">{token.name}</CardTitle>
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground"
-                      onClick={() => openTokenQr(token)}
-                      title="显示接入二维码"
-                    >
-                      <QrCode className="h-4 w-4" />
-                    </Button>
                     <Switch
                       checked={token.isActive}
                       onCheckedChange={(checked) => handleToggle(token.id, checked)}
@@ -507,42 +465,36 @@ export function TokenManager() {
         open={qrDialogOpen}
         onOpenChange={(open) => {
           setQrDialogOpen(open)
-          if (!open) setQrError('')
+          if (!open) {
+            setQrTitle('')
+            setQrEndpoint('')
+            setQrEncoded('')
+          }
         }}
       >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>接入二维码</DialogTitle>
             <DialogDescription>
-              扫码可获取该 Token 的 Base64 接入配置（仅当库中仍保留明文时可用；新 Token 仅存 SHA-256 摘要）。
+              仅本次创建成功时可生成；关闭对话框后请用已保存的 Base64 或新建 Token。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm">
               Token: <span className="font-medium">{qrTitle || '-'}</span>
             </p>
-            {qrError ? (
-              <p className="text-sm text-destructive">{qrError}</p>
-            ) : null}
             {qrEndpoint && (
               <p className="text-xs text-muted-foreground break-all">Endpoint: {qrEndpoint}</p>
             )}
             <div className="rounded-lg border p-4 flex items-center justify-center min-h-[280px]">
-              {qrLoading ? (
-                <div className="text-sm text-muted-foreground flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  生成中...
-                </div>
-              ) : qrEncoded ? (
+              {qrEncoded ? (
                 <img
                   src={getQrImageUrl(qrEncoded)}
                   alt="token qrcode"
                   className="h-[260px] w-[260px]"
                 />
               ) : (
-                <div className="text-sm text-muted-foreground">
-                  {qrError ? '无法生成二维码' : '暂无二维码数据'}
-                </div>
+                <div className="text-sm text-muted-foreground">暂无二维码数据</div>
               )}
             </div>
             {qrEncoded && (
