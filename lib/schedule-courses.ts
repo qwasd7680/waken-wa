@@ -25,6 +25,7 @@ export const MAX_SCHEDULE_TITLE_LEN = 120
 export const MAX_SCHEDULE_LOCATION_LEN = 200
 export const MAX_SCHEDULE_TEACHER_LEN = 120
 export const MAX_SCHEDULE_ICS_BYTES = 512 * 1024
+export const MAX_SCHEDULE_PERIODS = 24
 
 const timeHm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Invalid HH:mm')
 const dateYmd = z
@@ -51,11 +52,39 @@ export const scheduleCourseSchema = z.object({
   endTime: timeHm,
   /** Multiple slots on the same weekday (e.g. morning + afternoon). Omitted = single startTime/endTime. */
   timeSessions: z.array(scheduleTimeSessionSchema).max(MAX_TIME_SESSIONS_PER_COURSE).optional(),
+  /** Preferred period ids under schedulePeriodTemplate; when present, runtime times are resolved from template. */
+  periodIds: z.array(z.string().min(1).max(64)).max(MAX_TIME_SESSIONS_PER_COURSE).optional(),
   anchorDate: dateYmd,
   untilDate: dateYmd.optional(),
 })
 
 export type ScheduleCourse = z.infer<typeof scheduleCourseSchema>
+
+export const SCHEDULE_PERIOD_PARTS = ['morning', 'afternoon', 'evening'] as const
+export type SchedulePeriodPart = (typeof SCHEDULE_PERIOD_PARTS)[number]
+
+export type SchedulePeriodTemplateItem = {
+  id: string
+  label: string
+  part: SchedulePeriodPart
+  startTime: string
+  endTime: string
+  order: number
+}
+
+const schedulePeriodTemplateItemSchema = z.object({
+  id: z.string().min(1).max(64),
+  label: z.string().min(1).max(40),
+  part: z.enum(SCHEDULE_PERIOD_PARTS),
+  startTime: timeHm,
+  endTime: timeHm,
+  order: z.number().int().min(0).max(999),
+})
+
+const schedulePeriodTemplateSchema = z
+  .array(schedulePeriodTemplateItemSchema)
+  .min(1)
+  .max(MAX_SCHEDULE_PERIODS)
 
 export const scheduleCoursesArraySchema = z
   .array(scheduleCourseSchema)
@@ -120,13 +149,203 @@ export function parseScheduleCoursesJson(raw: unknown): {
   return { ok: true, data: parsed.data }
 }
 
+export function defaultSchedulePeriodTemplate(): SchedulePeriodTemplateItem[] {
+  return [
+    { id: 'p1', label: '1-2节', part: 'morning', startTime: '08:00', endTime: '09:40', order: 10 },
+    { id: 'p2', label: '3-4节', part: 'morning', startTime: '10:00', endTime: '11:40', order: 20 },
+    { id: 'p3', label: '5-6节', part: 'afternoon', startTime: '14:00', endTime: '15:40', order: 30 },
+    { id: 'p4', label: '7-8节', part: 'afternoon', startTime: '16:00', endTime: '17:40', order: 40 },
+    { id: 'p5', label: '9-10节', part: 'evening', startTime: '19:00', endTime: '20:40', order: 50 },
+  ]
+}
+
+export function parseSchedulePeriodTemplateJson(raw: unknown): {
+  ok: true
+  data: SchedulePeriodTemplateItem[]
+} | {
+  ok: false
+  error: string
+} {
+  if (raw == null) return { ok: true, data: defaultSchedulePeriodTemplate() }
+  const parsed = schedulePeriodTemplateSchema.safeParse(raw)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.flatten().formErrors.join('; ') || 'Invalid schedule period template',
+    }
+  }
+  const byId = new Set<string>()
+  const sorted = [...parsed.data].sort((a, b) => a.order - b.order)
+  let lastEndByPart = new Map<SchedulePeriodPart, number>()
+  for (const p of sorted) {
+    if (byId.has(p.id)) {
+      return { ok: false, error: `Period id duplicated: ${p.id}` }
+    }
+    byId.add(p.id)
+    const sm = parseHm(p.startTime)
+    const em = parseHm(p.endTime)
+    if (em <= sm) {
+      return { ok: false, error: `Period "${p.label}": end time must be after start time` }
+    }
+    const prevEnd = lastEndByPart.get(p.part)
+    if (prevEnd !== undefined && sm < prevEnd) {
+      return { ok: false, error: `Period "${p.label}": overlaps previous ${p.part} period` }
+    }
+    lastEndByPart.set(p.part, em)
+  }
+  return { ok: true, data: sorted }
+}
+
+export function resolveSchedulePeriodTemplate(raw: unknown): SchedulePeriodTemplateItem[] {
+  const parsed = parseSchedulePeriodTemplateJson(raw)
+  return parsed.ok ? parsed.data : defaultSchedulePeriodTemplate()
+}
+
+export function validateCoursePeriodIdsAgainstTemplate(
+  courses: ScheduleCourse[],
+  periodTemplate: SchedulePeriodTemplateItem[],
+): { ok: true } | { ok: false; error: string } {
+  const periodIdSet = new Set(periodTemplate.map((p) => p.id))
+  for (const c of courses) {
+    if (!c.periodIds || c.periodIds.length === 0) continue
+    for (const id of c.periodIds) {
+      if (!periodIdSet.has(id)) {
+        return { ok: false, error: `Course "${c.title}": unknown period id "${id}"` }
+      }
+    }
+  }
+  return { ok: true }
+}
+
+/** Try to fill periodIds for legacy courses: exact single-period match, then contiguous chain (e.g. 1–4 节). */
+export function backfillCoursePeriodIdsFromTemplate(
+  courses: ScheduleCourse[],
+  periodTemplate: SchedulePeriodTemplateItem[],
+): { courses: ScheduleCourse[]; warnings: string[] } {
+  const byRange = new Map<string, string>(
+    periodTemplate.map((p) => [`${p.startTime}-${p.endTime}`, p.id]),
+  )
+  const sortedByOrder = [...periodTemplate].sort((a, b) => a.order - b.order)
+  const warnings: string[] = []
+  const next = courses.map((c) => {
+    if (c.periodIds && c.periodIds.length > 0) return c
+    const sessions = getCourseTimeSessions(c)
+    const ids: string[] = []
+    let ok = true
+    for (const seg of sessions) {
+      const matched = matchTimeSessionToPeriodIds(seg, sortedByOrder, byRange)
+      if (!matched || matched.length === 0) {
+        ok = false
+        break
+      }
+      ids.push(...matched)
+    }
+    if (ok && ids.length > 0 && ids.length <= MAX_TIME_SESSIONS_PER_COURSE) {
+      return { ...c, periodIds: ids }
+    }
+    warnings.push(`课程「${c.title}」有时段未匹配到固定节次，请手动重新选择`)
+    return c
+  })
+  return { courses: next, warnings }
+}
+
 function parseHm(hm: string): number {
   const [h, m] = hm.split(':').map(Number)
   return h * 60 + m
 }
 
+/**
+ * Max gap (minutes) between adjacent template periods: legacy backfill chain, and merging periodIds into one display block.
+ */
+export const SCHEDULE_PERIOD_CHAIN_MAX_GAP_MINUTES = 120
+
+/**
+ * Map one legacy time segment to period ids: single exact row, or contiguous run in template order
+ * whose first start and last end match the segment (with small tolerance).
+ */
+function matchTimeSessionToPeriodIds(
+  seg: ScheduleTimeSession,
+  sortedByOrder: SchedulePeriodTemplateItem[],
+  byExactRange: Map<string, string>,
+): string[] | null {
+  const exact = byExactRange.get(`${seg.startTime}-${seg.endTime}`)
+  if (exact) return [exact]
+
+  const S = parseHm(seg.startTime)
+  const E = parseHm(seg.endTime)
+  if (E <= S) return null
+
+  const tol = 2
+
+  for (let i = 0; i < sortedByOrder.length; i++) {
+    if (Math.abs(parseHm(sortedByOrder[i].startTime) - S) > tol) continue
+
+    for (let j = i; j < sortedByOrder.length; j++) {
+      if (Math.abs(parseHm(sortedByOrder[j].endTime) - E) > tol) continue
+
+      let chainOk = true
+      for (let k = i; k < j; k++) {
+        const endK = parseHm(sortedByOrder[k].endTime)
+        const startNext = parseHm(sortedByOrder[k + 1].startTime)
+        const gap = startNext - endK
+        if (gap < -tol) {
+          chainOk = false
+          break
+        }
+        if (gap > SCHEDULE_PERIOD_CHAIN_MAX_GAP_MINUTES + tol) {
+          chainOk = false
+          break
+        }
+      }
+      if (chainOk) {
+        return sortedByOrder.slice(i, j + 1).map((p) => p.id)
+      }
+    }
+  }
+
+  return null
+}
+
+/** Merge consecutive HH:mm segments when gap between end and next start is within maxGapMin (e.g. chained class periods). */
+function mergeAdjacentTimeSessions(
+  segments: ScheduleTimeSession[],
+  maxGapMin: number,
+): ScheduleTimeSession[] {
+  if (segments.length === 0) return []
+  const tol = 2
+  const out: ScheduleTimeSession[] = []
+  let curStart = segments[0].startTime
+  let curEnd = segments[0].endTime
+  for (let i = 1; i < segments.length; i += 1) {
+    const gap = parseHm(segments[i].startTime) - parseHm(curEnd)
+    if (gap >= -tol && gap <= maxGapMin + tol) {
+      curEnd = segments[i].endTime
+    } else {
+      out.push({ startTime: curStart, endTime: curEnd })
+      curStart = segments[i].startTime
+      curEnd = segments[i].endTime
+    }
+  }
+  out.push({ startTime: curStart, endTime: curEnd })
+  return out
+}
+
 /** Effective time segments for one course (legacy single pair or explicit list). */
-export function getCourseTimeSessions(c: ScheduleCourse): ScheduleTimeSession[] {
+export function getCourseTimeSessions(
+  c: ScheduleCourse,
+  periodTemplate?: SchedulePeriodTemplateItem[],
+): ScheduleTimeSession[] {
+  if (periodTemplate && c.periodIds && c.periodIds.length > 0) {
+    const byId = new Map(periodTemplate.map((p) => [p.id, p]))
+    const picked = c.periodIds
+      .map((id) => byId.get(id))
+      .filter((item): item is SchedulePeriodTemplateItem => Boolean(item))
+      .sort((a, b) => a.order - b.order)
+      .map((p) => ({ startTime: p.startTime, endTime: p.endTime }))
+    if (picked.length > 0) {
+      return mergeAdjacentTimeSessions(picked, SCHEDULE_PERIOD_CHAIN_MAX_GAP_MINUTES)
+    }
+  }
   if (c.timeSessions && c.timeSessions.length > 0) {
     return c.timeSessions
   }
@@ -160,6 +379,7 @@ export function combineDateAndTime(day: Date, hm: string): Date {
 export function expandOccurrencesInWeek(
   courses: ScheduleCourse[],
   weekRef: Date,
+  periodTemplate?: SchedulePeriodTemplateItem[],
 ): ScheduleOccurrence[] {
   const ws = startOfWeek(weekRef, { weekStartsOn: 1 })
   const we = endOfWeek(weekRef, { weekStartsOn: 1 })
@@ -179,7 +399,7 @@ export function expandOccurrencesInWeek(
       const diff = differenceInCalendarDays(startOfDay(day), anchorDay)
       if (diff < 0 || diff % 7 !== 0) continue
 
-      for (const seg of getCourseTimeSessions(c)) {
+      for (const seg of getCourseTimeSessions(c, periodTemplate)) {
         const start = combineDateAndTime(day, seg.startTime)
         const end = combineDateAndTime(day, seg.endTime)
         out.push({
@@ -218,8 +438,9 @@ export function expandOccurrencesInWeek(
 export function findOngoingOccurrenceAt(
   courses: ScheduleCourse[],
   now: Date,
+  periodTemplate?: SchedulePeriodTemplateItem[],
 ): ScheduleOccurrence | null {
-  const occs = expandOccurrencesInWeek(courses, now)
+  const occs = expandOccurrencesInWeek(courses, now, periodTemplate)
   const t = now.getTime()
   for (const o of occs) {
     if (o.start.getTime() <= t && t < o.end.getTime()) {
@@ -233,8 +454,9 @@ export function findOngoingOccurrenceAt(
 export function getOccurrencesOnCalendarDay(
   courses: ScheduleCourse[],
   dayRef: Date,
+  periodTemplate?: SchedulePeriodTemplateItem[],
 ): ScheduleOccurrence[] {
-  const occs = expandOccurrencesInWeek(courses, dayRef)
+  const occs = expandOccurrencesInWeek(courses, dayRef, periodTemplate)
   const ymd = format(startOfDay(dayRef), 'yyyy-MM-dd')
   return occs
     .filter((o) => format(o.start, 'yyyy-MM-dd') === ymd)
@@ -252,11 +474,12 @@ export type ScheduleHomeCardState =
 export function resolveScheduleHomeCardState(
   courses: ScheduleCourse[],
   now: Date,
+  periodTemplate?: SchedulePeriodTemplateItem[],
 ): ScheduleHomeCardState {
-  const ongoing = findOngoingOccurrenceAt(courses, now)
+  const ongoing = findOngoingOccurrenceAt(courses, now, periodTemplate)
   if (ongoing) return { kind: 'in_class', occ: ongoing }
 
-  const todayOccs = getOccurrencesOnCalendarDay(courses, now)
+  const todayOccs = getOccurrencesOnCalendarDay(courses, now, periodTemplate)
   const t = now.getTime()
 
   if (todayOccs.length > 0) {
@@ -268,7 +491,7 @@ export function resolveScheduleHomeCardState(
   }
 
   const tomorrow = addDays(startOfDay(now), 1)
-  const tomorrowOccs = getOccurrencesOnCalendarDay(courses, tomorrow)
+  const tomorrowOccs = getOccurrencesOnCalendarDay(courses, tomorrow, periodTemplate)
   if (tomorrowOccs.length > 0) return { kind: 'rest_tomorrow_has' }
   return { kind: 'rest_no_tomorrow' }
 }

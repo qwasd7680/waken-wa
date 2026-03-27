@@ -11,9 +11,13 @@ import {
   normalizeHitokotoEncode,
 } from '@/lib/hitokoto'
 import {
+  backfillCoursePeriodIdsFromTemplate,
+  defaultSchedulePeriodTemplate,
   isAllowedSlotMinutes,
   MAX_SCHEDULE_ICS_BYTES,
+  parseSchedulePeriodTemplateJson,
   parseScheduleCoursesJson,
+  validateCoursePeriodIdsAgainstTemplate,
 } from '@/lib/schedule-courses'
 import {
   defaultScheduleGridByWeekday,
@@ -123,6 +127,19 @@ export async function PATCH(request: NextRequest) {
 
     let scheduleSlotMinutes =
       typeof existing?.scheduleSlotMinutes === 'number' ? existing.scheduleSlotMinutes : 30
+    const existingTemplateParsed = parseSchedulePeriodTemplateJson(
+      existing?.schedulePeriodTemplate ?? null,
+    )
+    let schedulePeriodTemplate = existingTemplateParsed.ok
+      ? existingTemplateParsed.data
+      : defaultSchedulePeriodTemplate()
+    if (body.schedulePeriodTemplate !== undefined) {
+      const parsedTemplate = parseSchedulePeriodTemplateJson(body.schedulePeriodTemplate)
+      if (!parsedTemplate.ok) {
+        return NextResponse.json({ success: false, error: parsedTemplate.error }, { status: 400 })
+      }
+      schedulePeriodTemplate = parsedTemplate.data
+    }
     let scheduleGridByWeekday: unknown = existing?.scheduleGridByWeekday ?? null
 
     const slotInBody =
@@ -166,6 +183,15 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ success: false, error: parsed.error }, { status: 400 })
       }
       scheduleCourses = parsed.data
+    }
+    const backfilled = backfillCoursePeriodIdsFromTemplate(scheduleCourses, schedulePeriodTemplate)
+    scheduleCourses = backfilled.courses
+    const periodValidation = validateCoursePeriodIdsAgainstTemplate(
+      scheduleCourses,
+      schedulePeriodTemplate,
+    )
+    if (!periodValidation.ok) {
+      return NextResponse.json({ success: false, error: periodValidation.error }, { status: 400 })
     }
 
     let scheduleIcs: string | null =
@@ -324,6 +350,7 @@ export async function PATCH(request: NextRequest) {
         autoAcceptNewDevices,
         inspirationAllowedDeviceHashes,
         scheduleSlotMinutes,
+        schedulePeriodTemplate,
         scheduleGridByWeekday,
         scheduleCourses,
         scheduleIcs,
@@ -366,6 +393,7 @@ export async function PATCH(request: NextRequest) {
         autoAcceptNewDevices,
         inspirationAllowedDeviceHashes,
         scheduleSlotMinutes,
+        schedulePeriodTemplate,
         scheduleGridByWeekday,
         scheduleCourses,
         scheduleIcs,

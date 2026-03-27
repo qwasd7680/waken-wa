@@ -3,6 +3,10 @@ import {
   normalizeHitokotoEncode,
 } from '@/lib/hitokoto'
 import { resolveScheduleGridByWeekday } from '@/lib/schedule-grid-by-weekday'
+import {
+  backfillCoursePeriodIdsFromTemplate,
+  resolveSchedulePeriodTemplate,
+} from '@/lib/schedule-courses'
 
 /**
  * Build JSON body for PATCH /api/admin/settings from a GET response row plus overrides.
@@ -11,6 +15,15 @@ export function buildAdminSettingsPatchBody(
   data: Record<string, unknown>,
   overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
+  const scheduleSlotMinutes =
+    typeof data.scheduleSlotMinutes === 'number' ? data.scheduleSlotMinutes : 30
+  const schedulePeriodTemplate = resolveSchedulePeriodTemplate(data.schedulePeriodTemplate)
+  const scheduleCoursesRaw = Array.isArray(data.scheduleCourses) ? data.scheduleCourses : []
+  const scheduleCourses = backfillCoursePeriodIdsFromTemplate(
+    scheduleCoursesRaw,
+    schedulePeriodTemplate,
+  ).courses
+
   return {
     pageTitle: data.pageTitle,
     userName: data.userName,
@@ -52,13 +65,13 @@ export function buildAdminSettingsPatchBody(
         ? data.scheduleHomeAfterClassesLabel.trim().slice(0, 40)
         : '正在摸鱼',
     globalMouseTiltEnabled: Boolean(data.globalMouseTiltEnabled),
-    scheduleSlotMinutes:
-      typeof data.scheduleSlotMinutes === 'number' ? data.scheduleSlotMinutes : 30,
+    scheduleSlotMinutes,
+    schedulePeriodTemplate,
     scheduleGridByWeekday: resolveScheduleGridByWeekday(
       data.scheduleGridByWeekday,
-      typeof data.scheduleSlotMinutes === 'number' ? data.scheduleSlotMinutes : 30,
+      scheduleSlotMinutes,
     ),
-    scheduleCourses: data.scheduleCourses ?? [],
+    scheduleCourses,
     scheduleIcs: typeof data.scheduleIcs === 'string' ? data.scheduleIcs : '',
     ...overrides,
   }

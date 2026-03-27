@@ -6,6 +6,10 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { resolveScheduleGridByWeekday } from '@/lib/schedule-grid-by-weekday'
+import {
+  backfillCoursePeriodIdsFromTemplate,
+  resolveSchedulePeriodTemplate,
+} from '@/lib/schedule-courses'
 
 async function requireAdmin() {
   const session = await getSession()
@@ -49,6 +53,15 @@ export async function GET(request: Request) {
     }
 
     const baseUrl = getBaseUrl(request)
+    const schedulePeriodTemplate = resolveSchedulePeriodTemplate(siteConfig.schedulePeriodTemplate)
+    const scheduleCoursesRaw = Array.isArray(siteConfig.scheduleCourses)
+      ? siteConfig.scheduleCourses
+      : []
+    const scheduleCourses = backfillCoursePeriodIdsFromTemplate(
+      scheduleCoursesRaw,
+      schedulePeriodTemplate,
+    ).courses
+
     const payload = {
       version: 1,
       exportedAt: new Date().toISOString(),
@@ -85,11 +98,12 @@ export async function GET(request: Request) {
             ? null
             : siteConfig.inspirationAllowedDeviceHashes,
         scheduleSlotMinutes: siteConfig.scheduleSlotMinutes ?? 30,
+        schedulePeriodTemplate,
         scheduleGridByWeekday: resolveScheduleGridByWeekday(
           siteConfig.scheduleGridByWeekday,
           siteConfig.scheduleSlotMinutes ?? 30,
         ),
-        scheduleCourses: siteConfig.scheduleCourses ?? [],
+        scheduleCourses,
         scheduleIcs: siteConfig.scheduleIcs ?? null,
         scheduleInClassOnHome: Boolean(siteConfig.scheduleInClassOnHome),
         scheduleHomeShowLocation: Boolean(siteConfig.scheduleHomeShowLocation),
@@ -104,7 +118,13 @@ export async function GET(request: Request) {
       },
       token: {
         reportEndpoint: `${baseUrl}/api/activity`,
-        items: tokens.map((t) => ({
+        items: tokens.map((t: {
+          id: number
+          name: string
+          isActive: boolean
+          createdAt: Date
+          lastUsedAt: Date | null
+        }) => ({
           id: t.id,
           name: t.name,
           isActive: t.isActive,

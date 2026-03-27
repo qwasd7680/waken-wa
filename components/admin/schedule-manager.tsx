@@ -7,7 +7,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Plus,
   Trash2,
   Upload,
 } from 'lucide-react'
@@ -24,6 +23,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -36,18 +36,18 @@ import { Textarea } from '@/components/ui/textarea'
 import { buildAdminSettingsPatchBody } from '@/lib/admin-settings-patch-body'
 import { exportCoursesToIcs, importIcsToCourses } from '@/lib/schedule-ics'
 import {
-  minIntervalFromGrid,
-  resolveScheduleGridByWeekday,
-  type ScheduleDayGrid,
-} from '@/lib/schedule-grid-by-weekday'
-import {
+  backfillCoursePeriodIdsFromTemplate,
+  defaultSchedulePeriodTemplate,
   expandOccurrencesInWeek,
   getCourseTimeSessions,
+  parseSchedulePeriodTemplateJson,
+  resolveSchedulePeriodTemplate,
+  type SchedulePeriodPart,
+  type SchedulePeriodTemplateItem,
   MAX_TIME_SESSIONS_PER_COURSE,
   newScheduleCourseId,
-  SCHEDULE_SLOT_MINUTES_ALLOWED,
+  validateCoursePeriodIdsAgainstTemplate,
   type ScheduleCourse,
-  type ScheduleTimeSession,
   snapAnchorToWeekday,
 } from '@/lib/schedule-courses'
 
@@ -60,6 +60,12 @@ const WEEKDAY_OPTIONS: { value: number; label: string }[] = [
   { value: 5, label: '周六' },
   { value: 6, label: '周日' },
 ]
+
+const PERIOD_PART_LABELS: Record<SchedulePeriodPart, string> = {
+  morning: '上午',
+  afternoon: '下午',
+  evening: '晚上',
+}
 
 function emptyCourse(): ScheduleCourse {
   const today = format(new Date(), 'yyyy-MM-dd')
@@ -75,8 +81,18 @@ function emptyCourse(): ScheduleCourse {
   }
 }
 
-function formatCourseTimeRanges(c: ScheduleCourse): string {
-  return getCourseTimeSessions(c).map((s) => `${s.startTime}–${s.endTime}`).join('、')
+function formatCourseTimeRanges(
+  c: ScheduleCourse,
+  periodTemplate: SchedulePeriodTemplateItem[],
+): string {
+  const byId = new Map(periodTemplate.map((p) => [p.id, p]))
+  if (c.periodIds && c.periodIds.length > 0) {
+    const labels = c.periodIds
+      .map((id) => byId.get(id)?.label)
+      .filter((v): v is string => Boolean(v))
+    if (labels.length > 0) return labels.join('、')
+  }
+  return getCourseTimeSessions(c, periodTemplate).map((s) => `${s.startTime}–${s.endTime}`).join('、')
 }
 
 export function ScheduleManager() {
@@ -85,9 +101,10 @@ export function ScheduleManager() {
   const [saving, setSaving] = useState(false)
   const [serverData, setServerData] = useState<Record<string, unknown> | null>(null)
   const [courses, setCourses] = useState<ScheduleCourse[]>([])
-  const [scheduleGridByWeekday, setScheduleGridByWeekday] = useState<ScheduleDayGrid[]>(() =>
-    resolveScheduleGridByWeekday(null, 30),
+  const [periodTemplate, setPeriodTemplate] = useState<SchedulePeriodTemplateItem[]>(() =>
+    defaultSchedulePeriodTemplate(),
   )
+  const [compatWarnings, setCompatWarnings] = useState<string[]>([])
   const [icsRaw, setIcsRaw] = useState('')
   const [weekRef, setWeekRef] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }))
 
@@ -116,13 +133,12 @@ export function ScheduleManager() {
       }
       const d = data.data as Record<string, unknown>
       setServerData(d)
-      setCourses(Array.isArray(d.scheduleCourses) ? (d.scheduleCourses as ScheduleCourse[]) : [])
-      setScheduleGridByWeekday(
-        resolveScheduleGridByWeekday(
-          d.scheduleGridByWeekday,
-          typeof d.scheduleSlotMinutes === 'number' ? d.scheduleSlotMinutes : 30,
-        ),
-      )
+      const tpl = resolveSchedulePeriodTemplate(d.schedulePeriodTemplate)
+      setPeriodTemplate(tpl)
+      const parsedCourses = Array.isArray(d.scheduleCourses) ? (d.scheduleCourses as ScheduleCourse[]) : []
+      const backfilled = backfillCoursePeriodIdsFromTemplate(parsedCourses, tpl)
+      setCourses(backfilled.courses)
+      setCompatWarnings(backfilled.warnings)
       setIcsRaw(typeof d.scheduleIcs === 'string' ? d.scheduleIcs : '')
       setInClassOnHome(Boolean(d.scheduleInClassOnHome))
       setHomeShowLocation(Boolean(d.scheduleHomeShowLocation))
@@ -146,23 +162,45 @@ export function ScheduleManager() {
   }, [load])
 
   const occurrences = useMemo(
-    () => expandOccurrencesInWeek(courses, weekRef),
-    [courses, weekRef],
+    () => expandOccurrencesInWeek(courses, weekRef, periodTemplate),
+    [courses, weekRef, periodTemplate],
   )
 
-  const patchScheduleDay = (index: number, patch: Partial<ScheduleDayGrid>) => {
-    setScheduleGridByWeekday((prev) => {
-      const next = [...prev]
-      next[index] = { ...next[index], ...patch }
-      return next
-    })
+  const patchPeriodTemplateItem = (
+    id: string,
+    patch: Partial<SchedulePeriodTemplateItem>,
+  ) => {
+    setPeriodTemplate((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+    )
   }
 
-  const copyFirstScheduleDayToWeek = () => {
-    setScheduleGridByWeekday((prev) => {
-      const first = prev[0]
-      return Array.from({ length: 7 }, () => ({ ...first }))
-    })
+  const addPeriodTemplateItem = (part: SchedulePeriodPart) => {
+    const samePart = periodTemplate.filter((p) => p.part === part)
+    const maxOrder = Math.max(0, ...samePart.map((p) => p.order))
+    const nextOrder = maxOrder + 10
+    const id = `p_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    setPeriodTemplate((prev) => [
+      ...prev,
+      {
+        id,
+        label: `${part === 'morning' ? '上午' : part === 'afternoon' ? '下午' : '晚上'}新节次`,
+        part,
+        startTime: part === 'morning' ? '08:00' : part === 'afternoon' ? '14:00' : '19:00',
+        endTime: part === 'morning' ? '09:40' : part === 'afternoon' ? '15:40' : '20:40',
+        order: nextOrder,
+      },
+    ])
+  }
+
+  const removePeriodTemplateItem = (id: string) => {
+    setPeriodTemplate((prev) => prev.filter((p) => p.id !== id))
+    setCourses((prev) =>
+      prev.map((c) => ({
+        ...c,
+        periodIds: c.periodIds?.filter((pid) => pid !== id),
+      })),
+    )
   }
 
   const save = async () => {
@@ -173,9 +211,24 @@ export function ScheduleManager() {
     setSaving(true)
     setMessage('')
     try {
+      const parsedTemplate = parseSchedulePeriodTemplateJson(periodTemplate)
+      if (!parsedTemplate.ok) {
+        setMessage(parsedTemplate.error)
+        setSaving(false)
+        return
+      }
+      const periodValidation = validateCoursePeriodIdsAgainstTemplate(
+        courses,
+        parsedTemplate.data,
+      )
+      if (!periodValidation.ok) {
+        setMessage(periodValidation.error)
+        setSaving(false)
+        return
+      }
+
       const body = buildAdminSettingsPatchBody(serverData, {
-        scheduleSlotMinutes: minIntervalFromGrid(scheduleGridByWeekday),
-        scheduleGridByWeekday,
+        schedulePeriodTemplate: parsedTemplate.data,
         scheduleCourses: courses,
         scheduleIcs: icsRaw.length > 0 ? icsRaw : '',
         scheduleInClassOnHome: inClassOnHome,
@@ -195,7 +248,16 @@ export function ScheduleManager() {
         return
       }
       setMessage('已保存')
-      setServerData(data.data as Record<string, unknown>)
+      const saved = data.data as Record<string, unknown>
+      setServerData(saved)
+      const tpl = resolveSchedulePeriodTemplate(saved.schedulePeriodTemplate)
+      setPeriodTemplate(tpl)
+      const backfilled = backfillCoursePeriodIdsFromTemplate(
+        Array.isArray(saved.scheduleCourses) ? (saved.scheduleCourses as ScheduleCourse[]) : courses,
+        tpl,
+      )
+      setCourses(backfilled.courses)
+      setCompatWarnings(backfilled.warnings)
     } catch {
       setMessage('网络异常')
     } finally {
@@ -204,17 +266,28 @@ export function ScheduleManager() {
   }
 
   const openNew = () => {
-    setEditing(emptyCourse())
+    const draft = emptyCourse()
+    if (periodTemplate.length > 0) {
+      draft.periodIds = [periodTemplate[0].id]
+      const sessions = getCourseTimeSessions(draft, periodTemplate)
+      if (sessions[0]) {
+        draft.startTime = sessions[0].startTime
+        draft.endTime = sessions[0].endTime
+        draft.timeSessions = sessions.length > 1 ? sessions : undefined
+      }
+    }
+    setEditing(draft)
     setDialogOpen(true)
   }
 
   const openEdit = (c: ScheduleCourse) => {
-    const sessions = getCourseTimeSessions(c)
+    const sessions = getCourseTimeSessions(c, periodTemplate)
     setEditing({
       ...c,
       timeSessions: sessions.map((s) => ({ ...s })),
       startTime: sessions[0].startTime,
       endTime: sessions[0].endTime,
+      periodIds: c.periodIds ?? [],
     })
     setDialogOpen(true)
   }
@@ -224,29 +297,28 @@ export function ScheduleManager() {
       setMessage('请填写课程名称')
       return
     }
-    const rawSessions: ScheduleTimeSession[] =
-      editing.timeSessions && editing.timeSessions.length > 0
-        ? editing.timeSessions
-        : [{ startTime: editing.startTime, endTime: editing.endTime }]
-    if (rawSessions.length > MAX_TIME_SESSIONS_PER_COURSE) {
-      setMessage(`同一课程最多 ${MAX_TIME_SESSIONS_PER_COURSE} 个时段`)
+    const periodIds = Array.from(new Set((editing.periodIds ?? []).filter(Boolean)))
+    if (periodIds.length === 0) {
+      setMessage('请至少选择一个节次')
       return
     }
-    for (let i = 0; i < rawSessions.length; i += 1) {
-      const [sh, sm] = rawSessions[i].startTime.split(':').map(Number)
-      const [eh, em] = rawSessions[i].endTime.split(':').map(Number)
-      if (eh * 60 + em <= sh * 60 + sm) {
-        setMessage(`时段 ${i + 1}：结束时间必须晚于开始时间`)
-        return
-      }
+    if (periodIds.length > MAX_TIME_SESSIONS_PER_COURSE) {
+      setMessage(`同一课程最多 ${MAX_TIME_SESSIONS_PER_COURSE} 个节次`)
+      return
     }
-    const first = rawSessions[0]
+    const withIds: ScheduleCourse = { ...editing, periodIds }
+    const resolvedSessions = getCourseTimeSessions(withIds, periodTemplate)
+    if (resolvedSessions.length === 0) {
+      setMessage('所选节次无效，请检查固定节次模板')
+      return
+    }
+    const first = resolvedSessions[0]
     let next: ScheduleCourse = {
-      ...editing,
+      ...withIds,
       title: editing.title.trim(),
       startTime: first.startTime,
       endTime: first.endTime,
-      timeSessions: rawSessions.length > 1 ? rawSessions : undefined,
+      timeSessions: resolvedSessions.length > 1 ? resolvedSessions : undefined,
       anchorDate: snapAnchorToWeekday(editing.anchorDate, editing.weekday),
     }
     if (next.location) next.location = next.location.trim() || undefined
@@ -300,7 +372,9 @@ export function ScheduleManager() {
         ...result.courses.map((c) => (ids.has(c.id) ? { ...c, id: newScheduleCourseId() } : c)),
       ]
     }
-    setCourses(next)
+    const backfilled = backfillCoursePeriodIdsFromTemplate(next, periodTemplate)
+    setCourses(backfilled.courses)
+    setCompatWarnings(backfilled.warnings)
     setIcsRaw(text)
     setIcsDialogOpen(false)
     setIcsPaste('')
@@ -425,73 +499,85 @@ export function ScheduleManager() {
 
       <div className="rounded-lg border border-border/60 bg-muted/10 p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h4 className="text-sm font-medium text-foreground">周视图时间轴（每日）</h4>
-          <Button type="button" variant="outline" size="sm" onClick={copyFirstScheduleDayToWeek}>
-            复制周一到整周
-          </Button>
+          <h4 className="text-sm font-medium text-foreground">固定节次模板（全站共用）</h4>
         </div>
         <p className="text-xs text-muted-foreground">
-          Set display range and tick step for each weekday. With fixed interval, grid lines align to
-          the step; when off, only hourly guide lines are shown. Course blocks always use actual
-          times.
+          课程只选择节次，不再手填具体时间。修改模板后，已有课程会自动按新节次时间显示。
         </p>
-        <div className="space-y-3">
-          {WEEKDAY_OPTIONS.map((w, i) => {
-            const day = scheduleGridByWeekday[i]
-            if (!day) return null
+        {compatWarnings.length > 0 ? (
+          <div className="rounded-md border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700">
+            {compatWarnings[0]}
+            {compatWarnings.length > 1 ? ` 等 ${compatWarnings.length} 条` : ''}
+          </div>
+        ) : null}
+        <div className="space-y-4">
+          {(['morning', 'afternoon', 'evening'] as const).map((part) => {
+            const rows = [...periodTemplate]
+              .filter((p) => p.part === part)
+              .sort((a, b) => a.order - b.order)
             return (
-              <div
-                key={w.value}
-                className="grid gap-2 sm:grid-cols-[minmax(0,4.5rem)_1fr_1fr_auto_auto] sm:items-center"
-              >
-                <span className="text-sm text-foreground">{w.label}</span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Label className="text-xs text-muted-foreground shrink-0">起</Label>
-                  <Input
-                    type="time"
-                    step={60}
-                    value={day.rangeStart}
-                    onChange={(e) => patchScheduleDay(i, { rangeStart: e.target.value })}
-                    className="h-9 w-[7rem] font-mono text-sm"
-                  />
-                  <Label className="text-xs text-muted-foreground shrink-0">止</Label>
-                  <Input
-                    type="time"
-                    step={60}
-                    value={day.rangeEnd}
-                    onChange={(e) => patchScheduleDay(i, { rangeEnd: e.target.value })}
-                    className="h-9 w-[7rem] font-mono text-sm"
-                  />
+              <div key={part} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>{PERIOD_PART_LABELS[part]}</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => addPeriodTemplateItem(part)}
+                  >
+                    新增节次
+                  </Button>
                 </div>
-                <Select
-                  value={String(day.intervalMinutes)}
-                  onValueChange={(v) =>
-                    patchScheduleDay(i, {
-                      intervalMinutes: Number(v) as ScheduleDayGrid['intervalMinutes'],
-                    })
-                  }
-                >
-                  <SelectTrigger className="h-9 w-[120px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SCHEDULE_SLOT_MINUTES_ALLOWED.map((m) => (
-                      <SelectItem key={m} value={String(m)}>
-                        {m} 分钟
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex items-center gap-2 sm:justify-end">
-                  <Label htmlFor={`fixed-int-${i}`} className="text-xs font-normal cursor-pointer">
-                    固定间隔
-                  </Label>
-                  <Switch
-                    id={`fixed-int-${i}`}
-                    checked={day.useFixedInterval}
-                    onCheckedChange={(checked) => patchScheduleDay(i, { useFixedInterval: checked })}
-                  />
-                </div>
+                {rows.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">暂无节次</p>
+                ) : (
+                  rows.map((row) => (
+                    <div
+                      key={row.id}
+                      className="grid gap-2 sm:grid-cols-[minmax(0,9rem)_auto_auto_auto_auto] sm:items-center"
+                    >
+                      <Input
+                        value={row.label}
+                        onChange={(e) => patchPeriodTemplateItem(row.id, { label: e.target.value })}
+                        placeholder="如：1-2节"
+                        className="h-9"
+                      />
+                      <Input
+                        type="time"
+                        step={60}
+                        value={row.startTime}
+                        onChange={(e) => patchPeriodTemplateItem(row.id, { startTime: e.target.value })}
+                        className="h-9 w-[7.5rem] font-mono"
+                      />
+                      <Input
+                        type="time"
+                        step={60}
+                        value={row.endTime}
+                        onChange={(e) => patchPeriodTemplateItem(row.id, { endTime: e.target.value })}
+                        className="h-9 w-[7.5rem] font-mono"
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        max={999}
+                        value={row.order}
+                        onChange={(e) =>
+                          patchPeriodTemplateItem(row.id, { order: Number(e.target.value || 0) })
+                        }
+                        className="h-9 w-[6rem]"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive"
+                        onClick={() => removePeriodTemplateItem(row.id)}
+                      >
+                        删除
+                      </Button>
+                    </div>
+                  ))
+                )}
               </div>
             )
           })}
@@ -536,7 +622,7 @@ export function ScheduleManager() {
 
       <WeekTimetableGrid
         weekRef={weekRef}
-        gridByWeekday={scheduleGridByWeekday}
+        periodTemplate={periodTemplate}
         occurrences={occurrences}
       />
 
@@ -560,7 +646,7 @@ export function ScheduleManager() {
                   <span className="font-medium">{c.title}</span>
                   <span className="text-muted-foreground ml-2">
                     {WEEKDAY_OPTIONS.find((w) => w.value === c.weekday)?.label}{' '}
-                    {formatCourseTimeRanges(c)}
+                    {formatCourseTimeRanges(c, periodTemplate)}
                   </span>
                   <span className="text-muted-foreground ml-2 text-xs">
                     开课 {c.anchorDate}
@@ -645,113 +731,52 @@ export function ScheduleManager() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <Label>上课时段</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8"
-                    disabled={
-                      (editing.timeSessions?.length ?? 1) >= MAX_TIME_SESSIONS_PER_COURSE
-                    }
-                    onClick={() => {
-                      const cur =
-                        editing.timeSessions && editing.timeSessions.length > 0
-                          ? editing.timeSessions
-                          : [{ startTime: editing.startTime, endTime: editing.endTime }]
-                      const extra: ScheduleTimeSession = { startTime: '14:00', endTime: '15:30' }
-                      const nextSessions = [...cur, extra]
-                      setEditing({
-                        ...editing,
-                        timeSessions: nextSessions,
-                        startTime: nextSessions[0].startTime,
-                        endTime: nextSessions[0].endTime,
-                      })
-                    }}
-                  >
-                    <Plus className="h-3.5 w-3.5 mr-1" />
-                    添加时段
-                  </Button>
-                </div>
+                <Label>选择节次（可多选）</Label>
                 <p className="text-[11px] text-muted-foreground">
-                  同一天可设多段（如上午、下午不同时间）；每段独立显示在课表与「正在上课」中。
+                  课程时间由固定节次模板决定。若模板修改，课程会自动按新时间变化。
                 </p>
-                {(editing.timeSessions && editing.timeSessions.length > 0
-                  ? editing.timeSessions
-                  : [{ startTime: editing.startTime, endTime: editing.endTime }]
-                ).map((seg, idx, arr) => (
-                  <div key={idx} className="flex flex-wrap items-end gap-2">
-                    <div className="space-y-1">
-                      <span className="text-[10px] text-muted-foreground">开始</span>
-                      <Input
-                        type="time"
-                        className="w-[7.5rem]"
-                        value={seg.startTime}
-                        onChange={(e) => {
-                          const v = e.target.value
-                          const base =
-                            editing.timeSessions && editing.timeSessions.length > 0
-                              ? [...editing.timeSessions]
-                              : [{ startTime: editing.startTime, endTime: editing.endTime }]
-                          base[idx] = { ...base[idx], startTime: v }
-                          setEditing({
-                            ...editing,
-                            timeSessions: base,
-                            startTime: base[0].startTime,
-                            endTime: base[0].endTime,
-                          })
-                        }}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-[10px] text-muted-foreground">结束</span>
-                      <Input
-                        type="time"
-                        className="w-[7.5rem]"
-                        value={seg.endTime}
-                        onChange={(e) => {
-                          const v = e.target.value
-                          const base =
-                            editing.timeSessions && editing.timeSessions.length > 0
-                              ? [...editing.timeSessions]
-                              : [{ startTime: editing.startTime, endTime: editing.endTime }]
-                          base[idx] = { ...base[idx], endTime: v }
-                          setEditing({
-                            ...editing,
-                            timeSessions: base,
-                            startTime: base[0].startTime,
-                            endTime: base[0].endTime,
-                          })
-                        }}
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-9 w-9 shrink-0 text-muted-foreground"
-                      disabled={arr.length <= 1}
-                      title={arr.length <= 1 ? '至少保留一个时段' : '删除此时段'}
-                      onClick={() => {
-                        if (arr.length <= 1) return
-                        const base =
-                          editing.timeSessions && editing.timeSessions.length > 0
-                            ? [...editing.timeSessions]
-                            : [{ startTime: editing.startTime, endTime: editing.endTime }]
-                        base.splice(idx, 1)
-                        setEditing({
-                          ...editing,
-                          timeSessions: base,
-                          startTime: base[0].startTime,
-                          endTime: base[0].endTime,
-                        })
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
+                <div className="space-y-2">
+                  {(['morning', 'afternoon', 'evening'] as const).map((part) => {
+                    const rows = [...periodTemplate]
+                      .filter((p) => p.part === part)
+                      .sort((a, b) => a.order - b.order)
+                    if (rows.length === 0) return null
+                    return (
+                      <div key={part} className="space-y-1">
+                        <div className="text-xs text-muted-foreground">{PERIOD_PART_LABELS[part]}</div>
+                        {rows.map((p) => {
+                          const checked = Boolean(editing.periodIds?.includes(p.id))
+                          return (
+                            <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(v) => {
+                                  const cur = new Set(editing.periodIds ?? [])
+                                  if (v) cur.add(p.id)
+                                  else cur.delete(p.id)
+                                  const periodIds = Array.from(cur)
+                                  const withIds: ScheduleCourse = { ...editing, periodIds }
+                                  const sessions = getCourseTimeSessions(withIds, periodTemplate)
+                                  setEditing({
+                                    ...editing,
+                                    periodIds,
+                                    startTime: sessions[0]?.startTime ?? editing.startTime,
+                                    endTime: sessions[0]?.endTime ?? editing.endTime,
+                                    timeSessions: sessions.length > 1 ? sessions : undefined,
+                                  })
+                                }}
+                              />
+                              <span>{p.label}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {p.startTime}–{p.endTime}
+                              </span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>开课日期（首次上课）</Label>

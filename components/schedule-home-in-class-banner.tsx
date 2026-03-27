@@ -4,13 +4,18 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { format } from 'date-fns'
 
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
-import { resolveScheduleHomeCardState, type ScheduleCourse } from '@/lib/schedule-courses'
+import {
+  resolveScheduleHomeCardState,
+  type ScheduleCourse,
+  type SchedulePeriodTemplateItem,
+} from '@/lib/schedule-courses'
 import { cn } from '@/lib/utils'
 
 type ScheduleHomeInClassBannerProps = {
   courses: ScheduleCourse[]
   showLocation: boolean
   showTeacher: boolean
+  periodTemplate?: SchedulePeriodTemplateItem[]
   /** When true, show the between-sessions “下一节” preview. Default false. */
   showNextUpcoming?: boolean
   /** Shown in the top-left when today’s classes are all over (default 正在摸鱼). */
@@ -59,23 +64,24 @@ export function ScheduleHomeInClassBanner({
   courses,
   showLocation,
   showTeacher,
+  periodTemplate,
   showNextUpcoming = false,
   afterClassesLabel,
   className,
 }: ScheduleHomeInClassBannerProps) {
   const idleDoneLabel = afterClassesLabel.trim() || '正在摸鱼'
   const [cardState, setCardState] = useState(() =>
-    resolveScheduleHomeCardState(courses, new Date()),
+    resolveScheduleHomeCardState(courses, new Date(), periodTemplate),
   )
 
   useEffect(() => {
     const tick = () => {
-      setCardState(resolveScheduleHomeCardState(courses, new Date()))
+      setCardState(resolveScheduleHomeCardState(courses, new Date(), periodTemplate))
     }
     tick()
     const id = window.setInterval(tick, 30_000)
     return () => window.clearInterval(id)
-  }, [courses])
+  }, [courses, periodTemplate])
 
   if (courses.length === 0) return null
 

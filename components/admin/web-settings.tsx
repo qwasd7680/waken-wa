@@ -34,7 +34,9 @@ import {
   type UserNoteHitokotoEncode,
 } from '@/lib/hitokoto'
 import {
+  resolveSchedulePeriodTemplate,
   isAllowedSlotMinutes,
+  type SchedulePeriodTemplateItem,
   type ScheduleCourse,
 } from '@/lib/schedule-courses'
 import {
@@ -299,6 +301,9 @@ function webPayloadToFormPatch(web: Record<string, unknown>): Partial<SiteConfig
       scheduleImportSlot,
     )
   }
+  if ('schedulePeriodTemplate' in web) {
+    patch.schedulePeriodTemplate = resolveSchedulePeriodTemplate(web.schedulePeriodTemplate)
+  }
   if ('scheduleCourses' in web && Array.isArray(web.scheduleCourses)) {
     patch.scheduleCourses = web.scheduleCourses as ScheduleCourse[]
   }
@@ -368,6 +373,7 @@ interface SiteConfig {
   inspirationDeviceRestrictionEnabled: boolean
   inspirationAllowedDeviceHashes: string[]
   scheduleSlotMinutes: number
+  schedulePeriodTemplate: SchedulePeriodTemplateItem[]
   scheduleGridByWeekday: ScheduleDayGrid[]
   scheduleCourses: ScheduleCourse[]
   scheduleIcs: string
@@ -437,6 +443,7 @@ export function WebSettings() {
     inspirationDeviceRestrictionEnabled: false,
     inspirationAllowedDeviceHashes: [],
     scheduleSlotMinutes: 30,
+    schedulePeriodTemplate: resolveSchedulePeriodTemplate(null),
     scheduleGridByWeekday: resolveScheduleGridByWeekday(null, 30),
     scheduleCourses: [],
     scheduleIcs: '',
@@ -514,6 +521,7 @@ export function WebSettings() {
             scheduleSlotMinutes: isAllowedSlotMinutes(Number(data.data.scheduleSlotMinutes))
               ? Number(data.data.scheduleSlotMinutes)
               : 30,
+            schedulePeriodTemplate: resolveSchedulePeriodTemplate(data.data.schedulePeriodTemplate),
             scheduleGridByWeekday: resolveScheduleGridByWeekday(
               data.data.scheduleGridByWeekday,
               isAllowedSlotMinutes(Number(data.data.scheduleSlotMinutes))
@@ -1132,24 +1140,38 @@ export function WebSettings() {
       </div>
 
       <Dialog open={cropDialogOpen} onOpenChange={setCropDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[min(92dvh,900px)] overflow-y-auto overscroll-contain">
           <DialogHeader>
             <DialogTitle>裁剪头像</DialogTitle>
-            <DialogDescription>左滑缩放可看全图，放大后拖动图片选取区域，确认后生成 64×64 头像。</DialogDescription>
+            <DialogDescription>
+              在预览框内拖动图片调整取景；下方滑块缩放。手机端请在框内拖动，避免与页面滚动冲突。
+            </DialogDescription>
           </DialogHeader>
           {cropSourceUrl && (
             <div className="space-y-3">
               <div
-                className="relative mx-auto border border-border rounded-md overflow-hidden bg-black/40 select-none"
-                style={{ width: CROP_VIEW_SIZE, height: CROP_VIEW_SIZE }}
-                onMouseDown={(e) => setDragStart({ x: e.clientX, y: e.clientY, offsetX: cropOffset.x, offsetY: cropOffset.y })}
-                onMouseMove={(e) => {
+                className="relative mx-auto border border-border rounded-md overflow-hidden bg-black/40 select-none touch-none"
+                style={{ width: CROP_VIEW_SIZE, height: CROP_VIEW_SIZE, touchAction: 'none' }}
+                onPointerDown={(e) => {
+                  if (e.pointerType === 'mouse' && e.button !== 0) return
+                  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+                  setDragStart({
+                    x: e.clientX,
+                    y: e.clientY,
+                    offsetX: cropOffset.x,
+                    offsetY: cropOffset.y,
+                  })
+                }}
+                onPointerMove={(e) => {
                   if (!dragStart) return
-                  const next = clampOffset(dragStart.offsetX + e.clientX - dragStart.x, dragStart.offsetY + e.clientY - dragStart.y)
+                  const next = clampOffset(
+                    dragStart.offsetX + e.clientX - dragStart.x,
+                    dragStart.offsetY + e.clientY - dragStart.y,
+                  )
                   setCropOffset(next)
                 }}
-                onMouseUp={() => setDragStart(null)}
-                onMouseLeave={() => setDragStart(null)}
+                onPointerUp={() => setDragStart(null)}
+                onPointerCancel={() => setDragStart(null)}
               >
                 <img
                   ref={cropImageRef}
@@ -1185,7 +1207,9 @@ export function WebSettings() {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">缩放（左滑缩小可看全图，右滑放大后拖动选取区域）</label>
+                <label className="text-xs text-muted-foreground">
+                  缩放
+                </label>
                 <input
                   type="range"
                   min={getMinZoom(naturalSize.width, naturalSize.height)}
@@ -1198,7 +1222,7 @@ export function WebSettings() {
                     setCropZoom(nextZoom)
                     setCropOffset(nextOffset)
                   }}
-                  className="w-full"
+                  className="w-full min-h-11 touch-manipulation"
                 />
               </div>
             </div>

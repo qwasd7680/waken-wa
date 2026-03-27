@@ -2,28 +2,37 @@
 
 import { addDays, format, startOfWeek } from 'date-fns'
 
-import type { ScheduleOccurrence } from '@/lib/schedule-courses'
-import {
-  parseTimeHmToMinutes,
-  type ScheduleDayGrid,
-} from '@/lib/schedule-grid-by-weekday'
+import type { ScheduleOccurrence, SchedulePeriodTemplateItem } from '@/lib/schedule-courses'
 import { cn } from '@/lib/utils'
 
-/** One row height per 15 minutes (baseline density). */
 const ROW_PX = 28
 const PX_PER_MINUTE = ROW_PX / 15
+const DEFAULT_START_MIN = 8 * 60
+const DEFAULT_END_MIN = 22 * 60
+const AXIS_STEP_MIN = 30
+const WEEK_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
-const DEFAULT_DAY_START_MIN = 8 * 60
-const DEFAULT_DAY_END_MIN = 22 * 60
-
-function minutesFromMidnight(d: Date): number {
-  return d.getHours() * 60 + d.getMinutes()
+function parseHm(hm: string): number {
+  const [h, m] = hm.split(':').map(Number)
+  return h * 60 + m
 }
 
 function formatMinuteLabel(m: number): string {
   const h = Math.floor(m / 60)
   const min = m % 60
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
+}
+
+function floorToStep(minute: number, step: number): number {
+  return Math.floor(minute / step) * step
+}
+
+function ceilToStep(minute: number, step: number): number {
+  return Math.ceil(minute / step) * step
+}
+
+function minutesFromMidnight(d: Date): number {
+  return d.getHours() * 60 + d.getMinutes()
 }
 
 function occurrenceLayoutKey(o: ScheduleOccurrence): string {
@@ -56,7 +65,7 @@ function assignLanesForDay(events: ScheduleOccurrence[]): Map<string, number> {
     const st = o.start.getTime()
     const en = o.end.getTime()
     let lane = -1
-    for (let i = 0; i < laneEndMs.length; i++) {
+    for (let i = 0; i < laneEndMs.length; i += 1) {
       if (laneEndMs[i] <= st) {
         lane = i
         laneEndMs[i] = en
@@ -72,72 +81,58 @@ function assignLanesForDay(events: ScheduleOccurrence[]): Map<string, number> {
   return map
 }
 
-function computeGlobalBounds(
-  gridByWeekday: ScheduleDayGrid[],
+function computeBounds(
+  periodTemplate: SchedulePeriodTemplateItem[],
   occurrences: ScheduleOccurrence[],
-): { globalStart: number; globalEnd: number } {
-  let gStart = DEFAULT_DAY_START_MIN
-  let gEnd = DEFAULT_DAY_END_MIN
-  for (const cfg of gridByWeekday) {
-    const rs = parseTimeHmToMinutes(cfg.rangeStart)
-    const re = parseTimeHmToMinutes(cfg.rangeEnd)
-    if (rs !== null && re !== null) {
-      gStart = Math.min(gStart, rs)
-      gEnd = Math.max(gEnd, re)
-    }
+): { start: number; end: number } {
+  let start = DEFAULT_START_MIN
+  let end = DEFAULT_END_MIN
+  for (const p of periodTemplate) {
+    start = Math.min(start, parseHm(p.startTime))
+    end = Math.max(end, parseHm(p.endTime))
   }
   for (const o of occurrences) {
-    const sm = minutesFromMidnight(o.start)
-    const em = minutesFromMidnight(o.end)
-    gStart = Math.min(gStart, sm)
-    gEnd = Math.max(gEnd, em)
+    start = Math.min(start, minutesFromMidnight(o.start))
+    end = Math.max(end, minutesFromMidnight(o.end))
   }
-  if (gEnd <= gStart) {
-    gEnd = gStart + 60
-  }
-  return { globalStart: gStart, globalEnd: gEnd }
+  if (end <= start) end = start + 60
+  return { start, end }
 }
 
 type WeekTimetableGridProps = {
   weekRef: Date
-  gridByWeekday: ScheduleDayGrid[]
+  periodTemplate: SchedulePeriodTemplateItem[]
   occurrences: ScheduleOccurrence[]
   className?: string
 }
 
-const WEEK_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-
-/** Hour marks for free (non-fixed) grid mode within [rs, re). */
-function hourTickMinutes(rs: number, re: number): number[] {
-  const out: number[] = []
-  const first = Math.ceil(rs / 60) * 60
-  for (let m = first; m < re; m += 60) {
-    out.push(m)
-  }
-  return out
-}
-
 export function WeekTimetableGrid({
   weekRef,
-  gridByWeekday,
+  periodTemplate,
   occurrences,
   className,
 }: WeekTimetableGridProps) {
   const weekStart = startOfWeek(weekRef, { weekStartsOn: 1 })
   const columnDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
 
-  const { globalStart, globalEnd } = computeGlobalBounds(gridByWeekday, occurrences)
+  const bounds = computeBounds(periodTemplate, occurrences)
+  const globalStart = floorToStep(bounds.start, AXIS_STEP_MIN)
+  const globalEnd = ceilToStep(bounds.end, AXIS_STEP_MIN)
   const totalMinutes = globalEnd - globalStart
   const totalHeight = Math.max(1, totalMinutes) * PX_PER_MINUTE
 
-  const labelStep =
-    gridByWeekday.length > 0
-      ? Math.min(...gridByWeekday.map((d) => d.intervalMinutes))
-      : 30
   const timeLabels: { m: number; text: string }[] = []
-  for (let m = globalStart; m < globalEnd; m += labelStep) {
+  for (let m = globalStart; m < globalEnd; m += AXIS_STEP_MIN) {
     timeLabels.push({ m, text: formatMinuteLabel(m) })
   }
+
+  const periodBoundaries = Array.from(
+    new Set(
+      periodTemplate.flatMap((p) => [parseHm(p.startTime), parseHm(p.endTime)]).filter((m) => (
+        m > globalStart && m < globalEnd
+      )),
+    ),
+  ).sort((a, b) => a - b)
 
   const byColumn = columnDays.map((day) => {
     const key = format(day, 'yyyy-MM-dd')
@@ -155,10 +150,7 @@ export function WeekTimetableGrid({
             <div
               key={`${m}-${i}`}
               className="text-[10px] tabular-nums pr-1 text-right border-t border-border/60"
-              style={{
-                height: labelStep * PX_PER_MINUTE,
-                lineHeight: `${Math.min(28, labelStep * PX_PER_MINUTE)}px`,
-              }}
+              style={{ height: AXIS_STEP_MIN * PX_PER_MINUTE, lineHeight: '28px' }}
             >
               {text}
             </div>
@@ -166,22 +158,9 @@ export function WeekTimetableGrid({
         </div>
         <div className="flex-1 grid grid-cols-7 border-l border-border">
           {columnDays.map((day, col) => {
-            const cfg = gridByWeekday[col] ?? gridByWeekday[0]
             const dayEvents = byColumn[col]
             const maxLanes = maxConcurrentOnDay(dayEvents)
             const laneByKey = assignLanesForDay(dayEvents)
-            const rs = parseTimeHmToMinutes(cfg.rangeStart) ?? DEFAULT_DAY_START_MIN
-            const re = parseTimeHmToMinutes(cfg.rangeEnd) ?? DEFAULT_DAY_END_MIN
-
-            const fixedTicks: number[] = []
-            if (cfg.useFixedInterval) {
-              for (let t = rs; t < re; t += cfg.intervalMinutes) {
-                fixedTicks.push(t)
-              }
-            }
-
-            const freeTicks = !cfg.useFixedInterval ? hourTickMinutes(rs, re) : []
-
             return (
               <div
                 key={col}
@@ -198,29 +177,27 @@ export function WeekTimetableGrid({
                   </div>
                 </div>
                 <div className="relative" style={{ height: totalHeight }}>
-                  {cfg.useFixedInterval
-                    ? fixedTicks.map((tickMin) => {
-                        const y = (tickMin - globalStart) * PX_PER_MINUTE
-                        if (tickMin < globalStart || tickMin >= globalEnd) return null
-                        return (
-                          <div
-                            key={`f-${tickMin}`}
-                            className="absolute left-0 right-0 border-t border-border/40 pointer-events-none"
-                            style={{ top: y }}
-                          />
-                        )
-                      })
-                    : freeTicks.map((tickMin) => {
-                        const y = (tickMin - globalStart) * PX_PER_MINUTE
-                        if (tickMin < globalStart || tickMin >= globalEnd) return null
-                        return (
-                          <div
-                            key={`h-${tickMin}`}
-                            className="absolute left-0 right-0 border-t border-border/25 pointer-events-none"
-                            style={{ top: y }}
-                          />
-                        )
-                      })}
+                  {timeLabels.map(({ m }) => {
+                    if (m === globalStart) return null
+                    const y = (m - globalStart) * PX_PER_MINUTE
+                    return (
+                      <div
+                        key={`axis-${m}`}
+                        className="absolute left-0 right-0 border-t border-border/25 pointer-events-none"
+                        style={{ top: y }}
+                      />
+                    )
+                  })}
+                  {periodBoundaries.map((m) => {
+                    const y = (m - globalStart) * PX_PER_MINUTE
+                    return (
+                      <div
+                        key={`period-${m}`}
+                        className="absolute left-0 right-0 border-t border-dashed border-primary/50 pointer-events-none"
+                        style={{ top: y }}
+                      />
+                    )
+                  })}
                   {dayEvents.map((o, idx) => {
                     const sm = minutesFromMidnight(o.start)
                     const em = minutesFromMidnight(o.end)
@@ -257,12 +234,6 @@ export function WeekTimetableGrid({
                         <div className="tabular-nums text-muted-foreground">
                           {format(o.start, 'HH:mm')}–{format(o.end, 'HH:mm')}
                         </div>
-                        {h >= ROW_PX * 1.75 && o.location ? (
-                          <div className="truncate text-muted-foreground">{o.location}</div>
-                        ) : null}
-                        {h >= ROW_PX * 2.25 && o.teacher ? (
-                          <div className="truncate text-muted-foreground/90">{o.teacher}</div>
-                        ) : null}
                       </div>
                     )
                   })}

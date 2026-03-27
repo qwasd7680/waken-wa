@@ -13,12 +13,30 @@ export type ScheduleDayGrid = {
   useFixedInterval: boolean
 }
 
-const HM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/
+const HM_LOOSE_RE = /^(\d{1,2}):(\d{1,2})$/
 
 export function parseTimeHmToMinutes(hm: string): number | null {
-  const m = HM_RE.exec(String(hm).trim())
+  const m = HM_LOOSE_RE.exec(String(hm).trim())
   if (!m) return null
-  return Number(m[1]) * 60 + Number(m[2])
+  const h = Number(m[1])
+  const min = Number(m[2])
+  if (!Number.isInteger(h) || !Number.isInteger(min)) return null
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null
+  return h * 60 + min
+}
+
+export function formatMinutesToHm(minutes: number): string {
+  const clamped = Math.min(23 * 60 + 59, Math.max(0, Math.round(minutes)))
+  const h = Math.floor(clamped / 60)
+  const min = clamped % 60
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
+}
+
+/** Normalize loose user input (e.g. 8:5 -> 08:05). Returns null when invalid. */
+export function normalizeTimeHm(hm: string): string | null {
+  const min = parseTimeHmToMinutes(hm)
+  if (min === null) return null
+  return formatMinutesToHm(min)
 }
 
 export function defaultScheduleDayGrid(legacySlotMinutes: number): ScheduleDayGrid {
@@ -63,6 +81,7 @@ export function normalizeScheduleGridByWeekday(
   if (!Array.isArray(raw) || raw.length !== SCHEDULE_GRID_WEEKDAY_COUNT) {
     return { ok: false, error: 'scheduleGridByWeekday must be an array of length 7' }
   }
+  const fallback = defaultScheduleDayGrid(legacySlotMinutes)
   const out: ScheduleDayGrid[] = []
   for (let i = 0; i < SCHEDULE_GRID_WEEKDAY_COUNT; i += 1) {
     const item = raw[i]
@@ -70,8 +89,14 @@ export function normalizeScheduleGridByWeekday(
       return { ok: false, error: `scheduleGridByWeekday[${i}] must be an object` }
     }
     const o = item as Record<string, unknown>
-    const rangeStart = String(o.rangeStart ?? '').trim()
-    const rangeEnd = String(o.rangeEnd ?? '').trim()
+    const rangeStart = normalizeTimeHm(String(o.rangeStart ?? fallback.rangeStart))
+    const rangeEnd = normalizeTimeHm(String(o.rangeEnd ?? fallback.rangeEnd))
+    if (!rangeStart || !rangeEnd) {
+      return {
+        ok: false,
+        error: `scheduleGridByWeekday[${i}]: invalid rangeStart/rangeEnd (use HH:mm)`,
+      }
+    }
     const rs = parseTimeHmToMinutes(rangeStart)
     const re = parseTimeHmToMinutes(rangeEnd)
     if (rs === null || re === null) {

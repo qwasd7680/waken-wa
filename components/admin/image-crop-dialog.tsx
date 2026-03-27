@@ -310,7 +310,7 @@ export function ImageCropDialog({
     return 0.5
   })()
 
-  const onCornerMouseDown = (corner: 'nw' | 'ne' | 'sw' | 'se', e: React.MouseEvent) => {
+  const onCornerPointerDown = (corner: 'nw' | 'ne' | 'sw' | 'se', e: React.PointerEvent) => {
     e.preventDefault()
     e.stopPropagation()
     if (isSquare) {
@@ -320,9 +320,9 @@ export function ImageCropDialog({
     }
   }
 
-  // Global mouse move/up for resizing — uses liveRef to avoid stale closures
+  // Global pointer move/up for resizing (mouse + touch) — uses liveRef to avoid stale closures
   useEffect(() => {
-    const onMove = (e: MouseEvent) => {
+    const onMove = (e: PointerEvent) => {
       const r = resizeRef.current
       if (!r) return
       const dx = e.clientX - r.startX
@@ -372,21 +372,26 @@ export function ImageCropDialog({
       }
     }
 
-    const onUp = () => { resizeRef.current = null }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
+    const onUp = () => {
+      resizeRef.current = null
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
     return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
     }
   }, [])
 
+  /** Visual size of corner knob; hit area uses TOUCH_HANDLE_PX for mobile-friendly targets */
   const handleSize = 10
-  const handleOffset = -handleSize / 2
+  const TOUCH_HANDLE_PX = 44
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[min(92dvh,900px)] overflow-y-auto overscroll-contain">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
@@ -394,10 +399,12 @@ export function ImageCropDialog({
         {sourceUrl && (
           <div className="space-y-3">
             <div
-              className="relative mx-auto border border-border rounded-md overflow-hidden bg-black/40"
-              style={{ width: CROP_VIEW_SIZE, height: CROP_VIEW_SIZE }}
-              onMouseDown={(e) => {
+              className="relative mx-auto border border-border rounded-md overflow-hidden bg-black/40 touch-none select-none"
+              style={{ width: CROP_VIEW_SIZE, height: CROP_VIEW_SIZE, touchAction: 'none' }}
+              onPointerDown={(e) => {
+                if (e.pointerType === 'mouse' && e.button !== 0) return
                 if ((e.target as HTMLElement).closest('[data-crop-handle]')) return
+                ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
                 setDragStart({
                   x: e.clientX,
                   y: e.clientY,
@@ -405,7 +412,7 @@ export function ImageCropDialog({
                   offsetY: cropOffset.y,
                 })
               }}
-              onMouseMove={(e) => {
+              onPointerMove={(e) => {
                 if (!dragStart || resizeRef.current) return
                 const ddx = e.clientX - dragStart.x
                 const ddy = e.clientY - dragStart.y
@@ -420,8 +427,8 @@ export function ImageCropDialog({
                 )
                 setCropOffset(next)
               }}
-              onMouseUp={() => setDragStart(null)}
-              onMouseLeave={() => setDragStart(null)}
+              onPointerUp={() => setDragStart(null)}
+              onPointerCancel={() => setDragStart(null)}
             >
               <img
                 ref={cropImageRef}
@@ -473,31 +480,34 @@ export function ImageCropDialog({
                 ))}
               </div>
 
-              {/* Corner resize handles */}
+              {/* Corner resize handles: large hit area for touch, small visible knob */}
               {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => {
-                const left = corner.includes('w')
-                  ? activeRect.x + handleOffset
-                  : activeRect.x + activeRect.w + handleOffset
-                const top = corner.includes('n')
-                  ? activeRect.y + handleOffset
-                  : activeRect.y + activeRect.h + handleOffset
+                const cx = corner.includes('w') ? activeRect.x : activeRect.x + activeRect.w
+                const cy = corner.includes('n') ? activeRect.y : activeRect.y + activeRect.h
+                const left = cx - TOUCH_HANDLE_PX / 2
+                const top = cy - TOUCH_HANDLE_PX / 2
                 return (
                   <div
                     key={corner}
                     data-crop-handle
                     role="presentation"
-                    className="absolute z-[3] border-2 border-primary bg-background"
+                    className="absolute z-[3] flex items-center justify-center touch-none"
                     style={{
-                      width: handleSize,
-                      height: handleSize,
+                      width: TOUCH_HANDLE_PX,
+                      height: TOUCH_HANDLE_PX,
                       left,
                       top,
-                      borderRadius: 2,
                       pointerEvents: 'auto',
                       cursor: corner === 'nw' || corner === 'se' ? 'nwse-resize' : 'nesw-resize',
+                      touchAction: 'none',
                     }}
-                    onMouseDown={(e) => onCornerMouseDown(corner, e)}
-                  />
+                    onPointerDown={(e) => onCornerPointerDown(corner, e)}
+                  >
+                    <span
+                      className="border-2 border-primary bg-background rounded-[2px] shrink-0"
+                      style={{ width: handleSize, height: handleSize }}
+                    />
+                  </div>
                 )
               })}
             </div>
@@ -505,8 +515,8 @@ export function ImageCropDialog({
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">
                 {isSquare
-                  ? '缩放（拖动图片平移；拖角点调整正方形边长）'
-                  : '缩放（拖动图片平移；拖角点调整裁剪框大小）'}
+                  ? '缩放'
+                  : '缩放'}
               </label>
               <input
                 type="range"
@@ -514,6 +524,7 @@ export function ImageCropDialog({
                 max={4}
                 step={0.01}
                 value={cropZoom}
+                className="w-full min-h-11 touch-manipulation"
                 onChange={(e) => {
                   const nextZoom = Number(e.target.value)
                   const bs = isSquare
@@ -526,7 +537,6 @@ export function ImageCropDialog({
                   setCropZoom(nextZoom)
                   setCropOffset(next)
                 }}
-                className="w-full"
               />
             </div>
           </div>

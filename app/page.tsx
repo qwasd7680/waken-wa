@@ -15,7 +15,11 @@ import {
   normalizeHitokotoCategories,
   normalizeHitokotoEncode,
 } from '@/lib/hitokoto'
-import { parseScheduleCoursesJson, type ScheduleCourse } from '@/lib/schedule-courses'
+import {
+  parseScheduleCoursesJson,
+  resolveSchedulePeriodTemplate,
+  type ScheduleCourse,
+} from '@/lib/schedule-courses'
 
 // 强制动态渲染，确保每次请求都获取最新数据
 export const dynamic = 'force-dynamic'
@@ -76,6 +80,9 @@ export default async function Home() {
   ).trim()
   const scheduleHomeAfterClassesLabel =
     scheduleHomeAfterClassesLabelRaw.slice(0, 40) || '正在摸鱼'
+  const schedulePeriodTemplate = resolveSchedulePeriodTemplate(
+    (config as Record<string, unknown>).schedulePeriodTemplate ?? null,
+  )
   let scheduleCoursesForHome: ScheduleCourse[] = []
   if (scheduleInClassOnHome) {
     const parsed = parseScheduleCoursesJson(config.scheduleCourses ?? null)
@@ -140,6 +147,7 @@ export default async function Home() {
                     courses={scheduleCoursesForHome}
                     showLocation={scheduleHomeShowLocation}
                     showTeacher={scheduleHomeShowTeacher}
+                    periodTemplate={schedulePeriodTemplate}
                     showNextUpcoming={scheduleHomeShowNextUpcoming}
                     afterClassesLabel={scheduleHomeAfterClassesLabel}
                     className="w-full sm:w-1/3 sm:min-w-0 sm:shrink-0 sm:basis-1/3"
