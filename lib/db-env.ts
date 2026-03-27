@@ -1,5 +1,7 @@
 import fs from 'fs'
+import { createRequire } from 'node:module'
 import path from 'path'
+import { fileURLToPath } from 'node:url'
 
 const POSTGRES_URL_RE = /^postgres(ql)?:\/\//i
 
@@ -24,14 +26,36 @@ export function pickPostgresUrlFromEnv(): string | null {
   return null
 }
 
-function prismaClientSchemaIsPostgresql(): boolean {
+function prismaGeneratedSchemaCandidates(): string[] {
+  const cwd = process.cwd()
+  const list: string[] = [
+    path.join(cwd, 'node_modules/.prisma/client/schema.prisma'),
+    path.join(cwd, 'node_modules/@prisma/client/schema.prisma'),
+  ]
   try {
-    const schemaPath = path.join(process.cwd(), 'node_modules/.prisma/client/schema.prisma')
-    if (!fs.existsSync(schemaPath)) return false
-    return fs.readFileSync(schemaPath, 'utf8').includes('provider = "postgresql"')
+    const require = createRequire(fileURLToPath(import.meta.url))
+    const pkgJson = require.resolve('@prisma/client/package.json')
+    const clientDir = path.dirname(pkgJson)
+    list.push(path.join(clientDir, '..', '.prisma', 'client', 'schema.prisma'))
   } catch {
-    return false
+    // bundled or missing @prisma/client during tooling
   }
+  return [...new Set(list)]
+}
+
+/** Provider from generated client schema (not repo prisma/schema.prisma). */
+function readGeneratedDatasourceProvider(): 'postgresql' | 'sqlite' | null {
+  for (const schemaPath of prismaGeneratedSchemaCandidates()) {
+    try {
+      if (!fs.existsSync(schemaPath)) continue
+      const text = fs.readFileSync(schemaPath, 'utf8')
+      if (text.includes('provider = "postgresql"')) return 'postgresql'
+      if (text.includes('provider = "sqlite"')) return 'sqlite'
+    } catch {
+      continue
+    }
+  }
+  return null
 }
 
 /**
@@ -39,9 +63,28 @@ function prismaClientSchemaIsPostgresql(): boolean {
  * (copy from POSTGRES_URL_NON_POOLING / POSTGRES_URL / etc. if needed).
  */
 export function applyDatabaseUrlAliases(): void {
-  if (!prismaClientSchemaIsPostgresql()) return
   const picked = pickPostgresUrlFromEnv()
-  if (picked) process.env.DATABASE_URL = picked
+  if (!picked) return
+
+  const provider = readGeneratedDatasourceProvider()
+  if (provider === 'postgresql') {
+    process.env.DATABASE_URL = picked
+    return
+  }
+  if (provider === 'sqlite') {
+    return
+  }
+
+  // Provider unknown (e.g. schema path differs in a worker). Never clobber file: SQLite URLs.
+  const cur = process.env.DATABASE_URL?.trim()
+  if (!cur) {
+    process.env.DATABASE_URL = picked
+    return
+  }
+  if (cur.startsWith('file:')) return
+  if (isPostgresConnectionUrl(cur)) {
+    process.env.DATABASE_URL = picked
+  }
 }
 
 applyDatabaseUrlAliases()
