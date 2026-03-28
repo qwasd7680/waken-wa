@@ -171,11 +171,15 @@ export function ScheduleHomeInClassBanner({
     }
     case 'rest_tomorrow_has':
     case 'rest_no_tomorrow': {
-      topRow = null
+      topRow = (
+        <span className="w-full min-w-0 truncate text-xs font-medium tracking-wide text-primary/90 sm:text-sm">
+          {idleDoneLabel}
+        </span>
+      )
       const msg =
         cardState.kind === 'rest_tomorrow_has' ? '明天有课哦~' : '今天没课~'
       bodyLine = (
-        <div className="min-w-0 shrink-0 text-base font-semibold leading-snug text-foreground line-clamp-2">
+        <div className="mt-1 min-w-0 shrink-0 text-base font-semibold leading-snug text-foreground line-clamp-2">
           {msg}
         </div>
       )

@@ -1,3 +1,4 @@
+import { ActivityFeedProvider } from '@/components/activity-feed-provider'
 import { UserProfile } from '@/components/user-profile'
 import { CurrentStatus } from '@/components/current-status'
 import { InspirationHomeSection } from '@/components/inspiration-home-section'
@@ -121,57 +122,58 @@ export default async function Home() {
       <main className="min-h-screen relative">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-16 pb-40">
           <ContentReadingPanel className="p-5 sm:p-6">
-            {/* Profile + current: tighter vertical rhythm */}
-            <div className="flex flex-col gap-4">
-              <div
-                className={
-                  showScheduleHomeColumn
-                    ? 'flex flex-col gap-3 sm:flex-row sm:flex-nowrap sm:items-start sm:gap-4'
-                    : 'flex flex-col gap-4'
-                }
-              >
+            {/* Profile + current: one activity feed subscription (polling/SSE) for both */}
+            <ActivityFeedProvider mode={activityUpdateMode}>
+              <div className="flex flex-col gap-4">
                 <div
                   className={
                     showScheduleHomeColumn
-                      ? 'min-w-0 w-full sm:flex-1 sm:basis-0 sm:overflow-hidden'
-                      : 'min-w-0 w-full'
+                      ? 'flex flex-col gap-3 sm:flex-row sm:flex-nowrap sm:items-start sm:gap-4'
+                      : 'flex flex-col gap-4'
                   }
                 >
-                  <UserProfile
-                    name={userName}
-                    bio={userBio}
-                    avatarUrl={avatarUrl}
-                    note={userNote}
-                    noteHitokotoEnabled={noteHitokotoEnabled}
-                    noteHitokotoCategories={noteHitokotoCategories}
-                    noteHitokotoEncode={noteHitokotoEncode}
-                    activityUpdateMode={activityUpdateMode}
-                  />
+                  <div
+                    className={
+                      showScheduleHomeColumn
+                        ? 'min-w-0 w-full sm:flex-1 sm:basis-0 sm:overflow-hidden'
+                        : 'min-w-0 w-full'
+                    }
+                  >
+                    <UserProfile
+                      name={userName}
+                      bio={userBio}
+                      avatarUrl={avatarUrl}
+                      note={userNote}
+                      noteHitokotoEnabled={noteHitokotoEnabled}
+                      noteHitokotoCategories={noteHitokotoCategories}
+                      noteHitokotoEncode={noteHitokotoEncode}
+                    />
+                  </div>
+                  {showScheduleHomeColumn ? (
+                    <ScheduleHomeInClassBanner
+                      courses={scheduleCoursesForHome}
+                      showLocation={scheduleHomeShowLocation}
+                      showTeacher={scheduleHomeShowTeacher}
+                      periodTemplate={schedulePeriodTemplate}
+                      showNextUpcoming={scheduleHomeShowNextUpcoming}
+                      afterClassesLabel={scheduleHomeAfterClassesLabel}
+                      className="w-full sm:w-1/3 sm:min-w-0 sm:shrink-0 sm:basis-1/3"
+                    />
+                  ) : null}
                 </div>
-                {showScheduleHomeColumn ? (
-                  <ScheduleHomeInClassBanner
-                    courses={scheduleCoursesForHome}
-                    showLocation={scheduleHomeShowLocation}
-                    showTeacher={scheduleHomeShowTeacher}
-                    periodTemplate={schedulePeriodTemplate}
-                    showNextUpcoming={scheduleHomeShowNextUpcoming}
-                    afterClassesLabel={scheduleHomeAfterClassesLabel}
-                    className="w-full sm:w-1/3 sm:min-w-0 sm:shrink-0 sm:basis-1/3"
-                  />
-                ) : null}
+
+                <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+
+                <section>
+                  <h2 className="text-sm font-semibold text-foreground tracking-tight mb-4">
+                    {currentlyText}
+                  </h2>
+                  <div className="space-y-3">
+                    <CurrentStatus hideActivityMedia={hideActivityMedia} />
+                  </div>
+                </section>
               </div>
-
-              <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-
-              <section>
-                <h2 className="text-sm font-semibold text-foreground tracking-tight mb-4">
-                  {currentlyText}
-                </h2>
-                <div className="space-y-3">
-                  <CurrentStatus hideActivityMedia={hideActivityMedia} activityUpdateMode={activityUpdateMode} />
-                </div>
-              </section>
-            </div>
+            </ActivityFeedProvider>
 
             {/* Timeline */}
             <section className="mt-8">
