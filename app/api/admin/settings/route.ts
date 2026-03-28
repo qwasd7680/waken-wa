@@ -27,6 +27,7 @@ import {
 import { normalizeInspirationAllowedHashes } from '@/lib/inspiration-device-allowlist'
 import { parseActivityLogRetentionMaxInput } from '@/lib/activity-log-retention'
 import { normalizeTimezone } from '@/lib/timezone'
+import { normalizeActivityUpdateMode } from '@/lib/activity-update-mode'
 
 const SCHEDULE_HOME_AFTER_CLASSES_LABEL_MAX = 40
 const DEFAULT_SCHEDULE_HOME_AFTER_CLASSES_LABEL = '正在摸鱼'
@@ -342,6 +343,12 @@ export async function PATCH(request: NextRequest) {
       displayTimezone = normalizeTimezone(body.displayTimezone)
     }
 
+    // 活动状态更新模式
+    let activityUpdateMode = existing?.activityUpdateMode ?? 'sse'
+    if (body.activityUpdateMode !== undefined && body.activityUpdateMode !== null) {
+      activityUpdateMode = normalizeActivityUpdateMode(body.activityUpdateMode)
+    }
+
     const config = await safeSiteConfigUpsert(prisma as any, {
       where: { id: 1 },
       update: {
@@ -388,6 +395,7 @@ export async function PATCH(request: NextRequest) {
         hcaptchaSiteKey,
         hcaptchaSecretKey,
         displayTimezone,
+        activityUpdateMode,
       },
       create: {
         id: 1,
@@ -434,6 +442,7 @@ export async function PATCH(request: NextRequest) {
         hcaptchaSiteKey,
         hcaptchaSecretKey,
         displayTimezone,
+        activityUpdateMode,
       },
     })
 
