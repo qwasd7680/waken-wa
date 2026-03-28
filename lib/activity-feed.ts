@@ -3,7 +3,6 @@ import {
   getAllActivities,
   cleanupStaleActivities,
   redactGeneratedHashKeyForClient,
-  type ActivityEntry,
   type ActivityFeedData,
 } from '@/lib/activity-store'
 import {

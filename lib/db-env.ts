@@ -24,7 +24,7 @@ export function pickPostgresUrlFromEnv(): string | null {
   return null
 }
 
-function prismaGeneratedSchemaCandidates(): string[] {
+function prismaLegacySchemaCandidates(): string[] {
   const cwd = process.cwd()
   const list: string[] = [
     path.join(cwd, 'node_modules/.prisma/client/schema.prisma'),
@@ -41,9 +41,22 @@ function prismaGeneratedSchemaCandidates(): string[] {
   return [...new Set(list)]
 }
 
-/** Provider from generated client schema (not repo prisma/schema.prisma). */
+/** Provider from generated Prisma Client (v7: internal/class.ts; legacy: copied schema.prisma). */
 function readGeneratedDatasourceProvider(): 'postgresql' | 'sqlite' | null {
-  for (const schemaPath of prismaGeneratedSchemaCandidates()) {
+  const cwd = process.cwd()
+  const classTs = path.join(cwd, 'generated/prisma/internal/class.ts')
+  try {
+    if (fs.existsSync(classTs)) {
+      const text = fs.readFileSync(classTs, 'utf8')
+      const m = text.match(/"activeProvider":\s*"(postgresql|sqlite)"/)
+      if (m?.[1] === 'postgresql' || m?.[1] === 'sqlite') {
+        return m[1]
+      }
+    }
+  } catch {
+    // fall through
+  }
+  for (const schemaPath of prismaLegacySchemaCandidates()) {
     try {
       if (!fs.existsSync(schemaPath)) continue
       const text = fs.readFileSync(schemaPath, 'utf8')

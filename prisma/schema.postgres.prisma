@@ -3,12 +3,12 @@
 // Env: standard postgres URL in DATABASE_URL or POSTGRES_URL (see lib/db-env.ts).
 
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model AdminUser {

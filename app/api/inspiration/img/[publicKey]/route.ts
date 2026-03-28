@@ -31,7 +31,7 @@ export async function GET(
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
-    return new NextResponse(parsed.buffer, {
+    return new NextResponse(new Uint8Array(parsed.buffer), {
       status: 200,
       headers: {
         'Content-Type': parsed.mime,

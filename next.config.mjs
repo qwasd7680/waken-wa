@@ -10,6 +10,10 @@ if (_pg && !process.env.DATABASE_URL?.trim()) {
 const nextConfig = {
   output: 'standalone',
   transpilePackages: ['ical.js'],
+  serverExternalPackages: ['pg', 'better-sqlite3'],
+  outputFileTracingIncludes: {
+    '/*': ['./generated/prisma/**/*'],
+  },
   typescript: {
     ignoreBuildErrors: false,
   },

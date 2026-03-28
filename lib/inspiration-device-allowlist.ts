@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient } from '@/generated/prisma/client'
 
 /**
  * `null` from DB = no restriction (any token-bound active device).

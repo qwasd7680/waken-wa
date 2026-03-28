@@ -2,12 +2,12 @@
 // For PostgreSQL use prisma/schema.postgres.prisma; URL: DATABASE_URL or POSTGRES_URL (postgres:// or postgresql://).
 
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
 }
 
 model AdminUser {
