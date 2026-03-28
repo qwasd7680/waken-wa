@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-const TEMPLATE_REPO_HREF = 'https://github.com/MoYoez/waken-wa-web'
+const TEMPLATE_REPO_HREF = 'https://github.com/MoYoez/waken-wa'
 
 function GitHubMark({ className }: { className?: string }) {
   return (

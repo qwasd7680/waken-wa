@@ -6,7 +6,7 @@
 # Optional env: WAKEN_DEPLOY_DIR, WAKEN_DIR, WAKEN_BRANCH, WAKEN_REPO_URL
 set -euo pipefail
 
-WAKEN_REPO_URL="${WAKEN_REPO_URL:-https://github.com/MoYoez/waken-wa-web.git}"
+WAKEN_REPO_URL="${WAKEN_REPO_URL:-https://github.com/MoYoez/waken-wa.git}"
 WAKEN_BRANCH="${WAKEN_BRANCH:-main}"
 WAKEN_DIR="${WAKEN_DIR:-waken-wa-web}"
 

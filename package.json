@@ -1,6 +1,6 @@
 {
-  "name": "waken-wa-web",
-  "version": "0.0.1",
+  "name": "waken-wa",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
