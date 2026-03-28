@@ -138,12 +138,17 @@ function MediaAndSteamRow({
   const pair = Boolean(media && steam)
 
   return (
-    <div className="flex w-full min-w-0 items-center gap-1.5">
+    <div
+      className={cn(
+        'flex w-full min-w-0 items-center',
+        pair ? 'gap-2' : 'gap-1.5',
+      )}
+    >
       {media ? (
         <div
           className={cn(
             'flex min-w-0 items-center gap-2',
-            pair ? 'flex-1 basis-0' : 'w-full min-w-0',
+            pair ? 'min-w-0 flex-1 basis-0' : 'w-full min-w-0',
           )}
         >
           <Music className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -151,20 +156,11 @@ function MediaAndSteamRow({
         </div>
       ) : null}
 
-      {pair ? (
-        <span
-          className="shrink-0 select-none px-0.5 text-muted-foreground/50 text-sm"
-          aria-hidden
-        >
-          |
-        </span>
-      ) : null}
-
       {steam ? (
         <div
           className={cn(
             'flex min-w-0 justify-end overflow-hidden',
-            pair ? 'flex-1 basis-0' : 'w-full min-w-0',
+            pair ? 'max-w-[50%] min-w-0 shrink' : 'w-full min-w-0',
           )}
         >
           <HoverCard openDelay={120}>
