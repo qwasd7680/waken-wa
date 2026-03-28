@@ -10,7 +10,7 @@ COPY drizzle.config.sqlite.ts drizzle.config.pg.ts ./
 COPY scripts ./scripts
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
-  && rm -rf /var/lib/apt/lists/* \
+  && rm -rf /var/lib/apt/lists \
   && pnpm install --frozen-lockfile --ignore-scripts \
   && pnpm rebuild better-sqlite3
 
@@ -32,11 +32,12 @@ RUN mkdir -p public
 RUN pnpm run build && rm -rf .next/cache
 
 
+# Drizzle CLI only: bump pnpm add versions when upgrading Drizzle or drivers in package.json.
 FROM base AS drizzle-tools
 WORKDIR /tools
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
-  && rm -rf /var/lib/apt/lists/*# Keep versions aligned with root package.json / lockfile when upgrading Drizzle or drivers.
+  && rm -rf /var/lib/apt/lists
 RUN printf '%s\n' '{"name":"drizzle-tools","private":true,"version":"1.0.0"}' > package.json \
   && pnpm add drizzle-kit@0.31.10 drizzle-orm@0.44.7 better-sqlite3@12.8.0 pg@8.20.0 dotenv@16.6.1 \
   && pnpm rebuild better-sqlite3
