@@ -64,7 +64,7 @@ function EntryBody({
         >
           {entry.title?.trim() ? entry.title : '（无标题）'}
         </Link>
-        <time className="text-[0.65rem] text-muted-foreground tabular-nums shrink-0 leading-none">
+        <time className="text-[0.65rem] text-muted-foreground tabular-nums shrink-0 leading-none" suppressHydrationWarning>
           <ClientTime dateString={entry.createdAt} />
         </time>
       </div>

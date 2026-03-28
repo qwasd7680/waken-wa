@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveActiveApiTokenFromPlainSecret } from '@/lib/api-token-secret'
-import { getSession } from '@/lib/auth'
+import { getSession, isSiteLockSatisfied } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import {
   getActivityFeedData,
@@ -32,8 +32,16 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const isPublicMode = searchParams.get('public') === '1'
 
-    // 公开模式：只返回 feed 数据，不需要认证
+    // 公开模式：只返回 feed 数据，但需要检查页面锁
     if (isPublicMode) {
+      // 检查页面锁：如果启用了页面锁且用户未解锁，拒绝访问
+      const siteLockOk = await isSiteLockSatisfied()
+      if (!siteLockOk) {
+        return NextResponse.json(
+          { success: false, error: '请先解锁页面' },
+          { status: 403 }
+        )
+      }
       const feed = await getActivityFeedData(50)
       return NextResponse.json({
         success: true,
