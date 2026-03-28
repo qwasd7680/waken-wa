@@ -22,9 +22,9 @@ export const ACTIVITY_UPDATE_MODE_OPTIONS: {
   },
   {
     value: 'realtime',
-    label: 'Supabase Realtime',
-    description: '使用 Supabase 实时订阅，最佳实时性',
-    warning: '在 Serverless 环境下可能产生较高的资源消耗和费用。每个连接会持续占用数据库连接池和计算资源。',
+    label: 'Realtime 实时订阅',
+    description: '使用数据库实时订阅功能（如 Supabase Realtime），获得最佳实时性',
+    warning: '在 Serverless 环境下可能产生较高的资源消耗和费用。每个连接会持续占用数据库连接池和计算资源。建议仅在需要极高实时性的场景下使用。',
   },
   {
     value: 'polling',

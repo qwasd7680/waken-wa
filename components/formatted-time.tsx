@@ -24,14 +24,15 @@ export function FormattedTime({ date, timezone, className }: FormattedTimeProps)
   }, [])
 
   const tz = timezone || DEFAULT_TIMEZONE
+  const isoDate = typeof date === 'string' ? date : date.toISOString()
   
   // 服务端渲染时显示占位符，避免水合错误
+  // 两个分支都需要 suppressHydrationWarning 以确保 React 不会报错
   if (!mounted) {
-    return <time className={className} suppressHydrationWarning>--</time>
+    return <time className={className} dateTime={isoDate} suppressHydrationWarning>--</time>
   }
 
   const formatted = formatDateTimeShort(date, tz)
-  const isoDate = typeof date === 'string' ? date : date.toISOString()
 
-  return <time className={className} dateTime={isoDate}>{formatted}</time>
+  return <time className={className} dateTime={isoDate} suppressHydrationWarning>{formatted}</time>
 }
