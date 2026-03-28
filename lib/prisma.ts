@@ -3,6 +3,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 
 import { PrismaClient } from '@/generated/prisma/client'
 import { isPostgresConnectionUrl } from '@/lib/db-env'
+import { postgresAdapterPoolConfig } from '@/lib/pg-pool-config'
 
 declare global {
   var prisma: PrismaClient | undefined
@@ -11,10 +12,7 @@ declare global {
 function createPrismaClient(): PrismaClient {
   const raw = process.env.DATABASE_URL?.trim()
   if (raw && isPostgresConnectionUrl(raw)) {
-    const adapter = new PrismaPg({
-      connectionString: raw,
-      connectionTimeoutMillis: 5000,
-    })
+    const adapter = new PrismaPg(postgresAdapterPoolConfig(raw))
     return new PrismaClient({ adapter })
   }
   const sqliteUrl =
