@@ -1,9 +1,12 @@
+import { eq } from 'drizzle-orm'
+
 import {
   cleanupStaleActivities,
   getAllActivities,
   redactGeneratedHashKeyForClient,
 } from '@/lib/activity-store'
-import prisma from '@/lib/prisma'
+import { db } from '@/lib/db'
+import { siteConfig } from '@/lib/drizzle-schema'
 import { getSteamNowPlayingByDeviceHashes } from '@/lib/steam-feed-merge'
 import {
   hydrateUserActivitiesIntoStoreOnce,
@@ -47,7 +50,7 @@ function getPushModeFromMetadata(metadata: unknown): 'realtime' | 'active' {
 function applyMessageRule(
   processName: string,
   processTitle: string | null,
-  rules: Array<{ match: string; text: string }>
+  rules: Array<{ match: string; text: string }>,
 ): string | null {
   const processLower = processName.toLowerCase()
   for (const rule of rules) {
@@ -65,14 +68,14 @@ function applyMessageRule(
 }
 
 export async function getHistoryWindowMinutes(): Promise<number> {
-  const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
+  const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
   const minutes = Number(config?.historyWindowMinutes ?? 120)
   if (!Number.isFinite(minutes)) return 120
   return Math.min(Math.max(Math.round(minutes), 10), 24 * 60)
 }
 
 export async function getActivityFeedData(limit = 50): Promise<ActivityFeedData> {
-  const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
+  const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
   const minutes = Number(config?.historyWindowMinutes ?? 120)
   const historyWindowMinutes = Number.isFinite(minutes)
     ? Math.min(Math.max(Math.round(minutes), 10), 24 * 60)
@@ -104,8 +107,8 @@ export async function getActivityFeedData(limit = 50): Promise<ActivityFeedData>
   }
 
   try {
-    await purgeExpiredUserActivitiesFromDbAndMemory(prisma as any)
-    await hydrateUserActivitiesIntoStoreOnce(prisma as any)
+    await purgeExpiredUserActivitiesFromDbAndMemory()
+    await hydrateUserActivitiesIntoStoreOnce()
   } catch (error) {
     console.error('[activity-feed] UserActivity purge/hydrate failed:', error)
   }
@@ -116,7 +119,7 @@ export async function getActivityFeedData(limit = 50): Promise<ActivityFeedData>
   const since = Date.now() - historyWindowMinutes * 60 * 1000
 
   const stillActive = allActivities.filter(
-    (a) => !a.endedAt && passesAppFilter(a.processName)
+    (a) => !a.endedAt && passesAppFilter(a.processName),
   )
 
   const recentActivitiesRaw = allActivities

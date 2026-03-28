@@ -1,0 +1,220 @@
+import { sql } from 'drizzle-orm'
+import {
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core'
+
+/** Prisma SQLite stores DateTime as TEXT (ISO-8601); runtime uses Drizzle timestamp mode (driver typing lags in 0.44). */
+const textCol = text as any
+const ts = (name: string) =>
+  textCol(name, { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(datetime('now'))`)
+const tsOpt = (name: string) => textCol(name, { mode: 'timestamp' })
+
+export const adminUsers = sqliteTable('admin_users', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  username: text('username').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  createdAt: ts('created_at'),
+})
+
+export const apiTokens = sqliteTable('api_tokens', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  token: text('token').notNull().unique(),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: ts('created_at'),
+  lastUsedAt: tsOpt('last_used_at'),
+})
+
+export const devices = sqliteTable(
+  'devices',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    displayName: text('display_name').notNull(),
+    generatedHashKey: text('generated_hash_key').notNull().unique(),
+    showSteamNowPlaying: integer('show_steam_now_playing', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+    status: text('status').notNull().default('active'),
+    apiTokenId: integer('api_token_id').references(() => apiTokens.id, {
+      onDelete: 'set null',
+    }),
+    lastSeenAt: tsOpt('last_seen_at'),
+    createdAt: ts('created_at'),
+    updatedAt: ts('updated_at'),
+  },
+  (t) => [index('devices_api_token_id_idx').on(t.apiTokenId)],
+)
+
+export const userActivities = sqliteTable(
+  'user_activities',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    deviceId: integer('device_id')
+      .notNull()
+      .references(() => devices.id, { onDelete: 'cascade' }),
+    generatedHashKey: text('generated_hash_key').notNull(),
+    processName: text('process_name').notNull(),
+    processTitle: text('process_title'),
+    metadata: text('metadata', { mode: 'json' }),
+    startedAt: ts('started_at'),
+    expiresAt: textCol('expires_at', { mode: 'timestamp' }).notNull(),
+    createdAt: ts('created_at'),
+    updatedAt: ts('updated_at'),
+  },
+  (t) => [
+    uniqueIndex('user_activities_device_id_process_name_key').on(
+      t.deviceId,
+      t.processName,
+    ),
+  ],
+)
+
+export const siteConfig = sqliteTable('site_config', {
+  id: integer('id').primaryKey().default(1),
+  pageTitle: text('page_title')
+    .notNull()
+    .default('别睡了啦！看看你在做什么'),
+  userName: text('user_name').notNull(),
+  userBio: text('user_bio').notNull(),
+  avatarUrl: text('avatar_url').notNull(),
+  userNote: text('user_note').notNull(),
+  userNoteHitokotoEnabled: integer('user_note_hitokoto_enabled', {
+    mode: 'boolean',
+  })
+    .notNull()
+    .default(false),
+  userNoteHitokotoCategories: text('user_note_hitokoto_categories', {
+    mode: 'json',
+  }),
+  userNoteHitokotoEncode: text('user_note_hitokoto_encode')
+    .notNull()
+    .default('json'),
+  themePreset: text('theme_preset').notNull().default('basic'),
+  themeCustomSurface: text('theme_custom_surface', { mode: 'json' }),
+  customCss: text('custom_css'),
+  historyWindowMinutes: integer('history_window_minutes').notNull().default(120),
+  appMessageRules: text('app_message_rules', { mode: 'json' }),
+  appMessageRulesShowProcessName: integer('app_message_rules_show_process_name', {
+    mode: 'boolean',
+  })
+    .notNull()
+    .default(true),
+  appBlacklist: text('app_blacklist', { mode: 'json' }),
+  appWhitelist: text('app_whitelist', { mode: 'json' }),
+  appFilterMode: text('app_filter_mode').notNull().default('blacklist'),
+  appNameOnlyList: text('app_name_only_list', { mode: 'json' }),
+  processStaleSeconds: integer('process_stale_seconds').notNull().default(500),
+  pageLockEnabled: integer('page_lock_enabled', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+  pageLockPasswordHash: text('page_lock_password_hash'),
+  currentlyText: text('currently_text').notNull().default('当前状态'),
+  earlierText: text('earlier_text').notNull().default('最近的随想录'),
+  adminText: text('admin_text').notNull().default('admin'),
+  autoAcceptNewDevices: integer('auto_accept_new_devices', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+  inspirationAllowedDeviceHashes: text('inspiration_allowed_device_hashes', {
+    mode: 'json',
+  }),
+  scheduleSlotMinutes: integer('schedule_slot_minutes').notNull().default(30),
+  schedulePeriodTemplate: text('schedule_period_template', { mode: 'json' }),
+  scheduleGridByWeekday: text('schedule_grid_by_weekday', { mode: 'json' }),
+  scheduleCourses: text('schedule_courses', { mode: 'json' }),
+  scheduleIcs: text('schedule_ics'),
+  scheduleInClassOnHome: integer('schedule_in_class_on_home', {
+    mode: 'boolean',
+  })
+    .notNull()
+    .default(false),
+  scheduleHomeShowLocation: integer('schedule_home_show_location', {
+    mode: 'boolean',
+  })
+    .notNull()
+    .default(false),
+  scheduleHomeShowTeacher: integer('schedule_home_show_teacher', {
+    mode: 'boolean',
+  })
+    .notNull()
+    .default(false),
+  scheduleHomeShowNextUpcoming: integer('schedule_home_show_next_upcoming', {
+    mode: 'boolean',
+  })
+    .notNull()
+    .default(false),
+  scheduleHomeAfterClassesLabel: text('schedule_home_after_classes_label')
+    .notNull()
+    .default('正在摸鱼'),
+  globalMouseTiltEnabled: integer('global_mouse_tilt_enabled', {
+    mode: 'boolean',
+  })
+    .notNull()
+    .default(false),
+  hideActivityMedia: integer('hide_activity_media', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+  hcaptchaEnabled: integer('hcaptcha_enabled', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+  hcaptchaSiteKey: text('hcaptcha_site_key'),
+  hcaptchaSecretKey: text('hcaptcha_secret_key'),
+  displayTimezone: text('display_timezone').notNull().default('Asia/Shanghai'),
+  activityUpdateMode: text('activity_update_mode').notNull().default('sse'),
+  steamEnabled: integer('steam_enabled', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+  steamId: text('steam_id'),
+  steamApiKey: text('steam_api_key'),
+  createdAt: ts('created_at'),
+  updatedAt: ts('updated_at'),
+})
+
+export const systemSecrets = sqliteTable('system_secrets', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+})
+
+export const inspirationEntries = sqliteTable('inspiration_entries', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  title: text('title'),
+  content: text('content').notNull(),
+  imageDataUrl: text('image_data_url'),
+  statusSnapshot: text('status_snapshot'),
+  createdAt: ts('created_at'),
+  updatedAt: ts('updated_at'),
+})
+
+export const inspirationAssets = sqliteTable(
+  'inspiration_assets',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    publicKey: text('public_key')
+      .notNull()
+      .unique()
+      .$defaultFn(() => crypto.randomUUID()),
+    imageDataUrl: text('image_data_url').notNull(),
+    inspirationEntryId: integer('inspiration_entry_id').references(
+      () => inspirationEntries.id,
+      { onDelete: 'cascade' },
+    ),
+    createdAt: ts('created_at'),
+  },
+  (t) => [index('inspiration_assets_inspiration_entry_id_idx').on(t.inspirationEntryId)],
+)
+
+export const sqliteSchema = {
+  adminUsers,
+  apiTokens,
+  devices,
+  userActivities,
+  siteConfig,
+  systemSecrets,
+  inspirationEntries,
+  inspirationAssets,
+}

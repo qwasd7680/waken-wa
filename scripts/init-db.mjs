@@ -1,18 +1,17 @@
 import { execSync } from 'node:child_process'
 
-import { repoRoot,resolvePrismaEnv } from './prisma-resolve-env.mjs'
+import { repoRoot, resolveDatabaseEnv } from './resolve-database-env.mjs'
 
 try {
-  const { schemaRel, provider } = resolvePrismaEnv({ forInitDb: true })
+  const { drizzleConfig, provider } = resolveDatabaseEnv({ forInitDb: true })
 
   function run(cmd) {
     execSync(cmd, { stdio: 'inherit', cwd: repoRoot, env: process.env, shell: true })
   }
 
-  console.log(`[init-db] provider=${provider} schema=${schemaRel}`)
+  console.log(`[init-db] provider=${provider} config=${drizzleConfig}`)
 
-  run(`npx prisma generate --schema ${schemaRel}`)
-  run(`npx prisma db push --schema ${schemaRel}`)
+  run(`pnpm exec drizzle-kit push --config ${drizzleConfig}`)
 
   console.log('[init-db] done')
 } catch (e) {

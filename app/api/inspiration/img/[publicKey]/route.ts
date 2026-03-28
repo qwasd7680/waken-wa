@@ -1,7 +1,9 @@
+import { sql } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
 
+import { db } from '@/lib/db'
+import { inspirationAssets } from '@/lib/drizzle-schema'
 import { parseDataImagePayload } from '@/lib/inspiration-inline-images'
-import prisma from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -10,7 +12,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export async function GET(
   _request: NextRequest,
-  context: { params: Promise<{ publicKey: string }> }
+  context: { params: Promise<{ publicKey: string }> },
 ) {
   try {
     const { publicKey: rawKey } = await context.params
@@ -19,9 +21,13 @@ export async function GET(
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
-    const row = await (prisma as any).inspirationAsset.findFirst({
-      where: { publicKey },
-    })
+    const [row] = await db
+      .select()
+      .from(inspirationAssets)
+      .where(
+        sql`lower(cast(${inspirationAssets.publicKey} as text)) = ${publicKey}`,
+      )
+      .limit(1)
 
     if (!row?.imageDataUrl) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })

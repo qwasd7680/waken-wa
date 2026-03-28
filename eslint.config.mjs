@@ -20,19 +20,6 @@ export default defineConfig([
     rules: {
       'simple-import-sort/exports': 'error',
       'simple-import-sort/imports': 'error',
-      // Project rule: Prisma 7 client is generated to @/generated/prisma/client, not @prisma/client.
-      'no-restricted-imports': [
-        'error',
-        {
-          paths: [
-            {
-              name: '@prisma/client',
-              message:
-                'Import PrismaClient and model types from @/generated/prisma/client (Prisma ORM 7).',
-            },
-          ],
-        },
-      ],
     },
   },
   globalIgnores([

@@ -1,15 +1,17 @@
 import bcrypt from 'bcryptjs'
+import { eq } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { normalizeActivityUpdateMode } from '@/lib/activity-update-mode'
 import { getSession } from '@/lib/auth'
+import { db } from '@/lib/db'
 import { DEFAULT_PAGE_TITLE, PAGE_TITLE_MAX_LEN } from '@/lib/default-page-title'
+import { siteConfig } from '@/lib/drizzle-schema'
 import {
   normalizeHitokotoCategories,
   normalizeHitokotoEncode,
 } from '@/lib/hitokoto'
 import { normalizeInspirationAllowedHashes } from '@/lib/inspiration-device-allowlist'
-import prisma from '@/lib/prisma'
 import { safeSiteConfigUpsert } from '@/lib/safe-site-config-upsert'
 import {
   backfillCoursePeriodIdsFromTemplate,
@@ -48,7 +50,7 @@ export async function GET() {
   }
 
   try {
-    const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
+    const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
     if (!config) {
       return NextResponse.json({ success: true, data: null })
     }
@@ -115,7 +117,7 @@ export async function PATCH(request: NextRequest) {
       ? Math.min(Math.max(Math.round(parsedStaleSeconds), 30), 24 * 60 * 60)
       : 500
 
-    const existing = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
+    const [existing] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
 
     let inspirationAllowedDeviceHashes: string[] | null = normalizeInspirationAllowedHashes(
       existing?.inspirationAllowedDeviceHashes ?? null,
@@ -360,7 +362,7 @@ export async function PATCH(request: NextRequest) {
           : null
     }
 
-    const config = await safeSiteConfigUpsert(prisma as any, {
+    await safeSiteConfigUpsert({
       where: { id: 1 },
       update: {
         pageTitle,
@@ -460,6 +462,11 @@ export async function PATCH(request: NextRequest) {
         steamApiKey,
       },
     })
+
+    const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
+    if (!config) {
+      return NextResponse.json({ success: false, error: '站点配置不存在' }, { status: 500 })
+    }
 
     const safeOut = {
       ...config,

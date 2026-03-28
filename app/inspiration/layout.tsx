@@ -1,14 +1,16 @@
+import { eq } from 'drizzle-orm'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 
 import { SiteLockForm } from '@/components/site-lock-form'
 import { verifySiteLockSession } from '@/lib/auth'
+import { db } from '@/lib/db'
+import { siteConfig } from '@/lib/drizzle-schema'
 import { getHCaptchaPublicConfig } from '@/lib/hcaptcha'
-import prisma from '@/lib/prisma'
 import { getThemePresetCss } from '@/lib/theme-css'
 
 export default async function InspirationLayout({ children }: { children: React.ReactNode }) {
-  const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
+  const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
   if (!config) {
     redirect('/admin/setup')
   }

@@ -1,10 +1,12 @@
+import { count, desc, eq, or, sql } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getActivityFeedData } from '@/lib/activity-feed'
 import { getBearerApiTokenRecord, getSession, isSiteLockSatisfied } from '@/lib/auth'
+import { db } from '@/lib/db'
+import { inspirationEntries } from '@/lib/drizzle-schema'
 import { gateInspirationApiForDevice } from '@/lib/inspiration-device-allowlist'
 import { linkInspirationAssetsToEntry, validateInlineImageDataUrl } from '@/lib/inspiration-inline-images'
-import prisma from '@/lib/prisma'
 
 function formatStatusSnapshotFromFeed(feed: Awaited<ReturnType<typeof getActivityFeedData>>): string | null {
   const lines = feed.activeStatuses
@@ -36,39 +38,27 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get('offset') || '0')
     const q = searchParams.get('q')?.trim()
 
-    const dbUrl = process.env.DATABASE_URL ?? ''
-    const useInsensitive =
-      dbUrl.startsWith('postgresql:') || dbUrl.startsWith('postgres:')
+    const pattern = q ? `%${q}%` : null
+    const searchCond =
+      pattern &&
+      or(
+        sql`coalesce(lower(${inspirationEntries.title}), '') like lower(${pattern})`,
+        sql`lower(${inspirationEntries.content}) like lower(${pattern})`,
+        sql`coalesce(lower(${inspirationEntries.statusSnapshot}), '') like lower(${pattern})`,
+      )
 
-    const textContains = (value: string) =>
-      useInsensitive
-        ? ({ contains: value, mode: 'insensitive' as const } as const)
-        : ({ contains: value } as const)
+    const listBase = db.select().from(inspirationEntries).orderBy(desc(inspirationEntries.createdAt))
+    const countBase = db.select({ c: count() }).from(inspirationEntries)
 
-    const where: any = q
-      ? {
-          OR: [
-            { title: textContains(q) },
-            { content: textContains(q) },
-            { statusSnapshot: textContains(q) },
-          ],
-        }
-      : {}
-
-    const [items, total] = await Promise.all([
-      (prisma as any).inspirationEntry.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-        skip: offset,
-      }),
-      (prisma as any).inspirationEntry.count({ where }),
+    const [items, [totalRow]] = await Promise.all([
+      (searchCond ? listBase.where(searchCond) : listBase).limit(limit).offset(offset),
+      searchCond ? countBase.where(searchCond) : countBase,
     ])
 
     return NextResponse.json({
       success: true,
       data: items,
-      pagination: { limit, offset, total },
+      pagination: { limit, offset, total: Number(totalRow?.c ?? 0) },
     })
   } catch (error) {
     console.error('获取灵感条目失败:', error)
@@ -88,7 +78,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     if (!session && apiToken) {
       const gate = await gateInspirationApiForDevice(
-        prisma,
         apiToken.id,
         request,
         body && typeof body === 'object' ? (body as Record<string, unknown>) : null,
@@ -102,7 +91,7 @@ export async function POST(request: NextRequest) {
     if (attachCurrentStatus && !session) {
       return NextResponse.json(
         { success: false, error: '仅登录管理员可附带当前状态' },
-        { status: 403 }
+        { status: 403 },
       )
     }
 
@@ -137,16 +126,19 @@ export async function POST(request: NextRequest) {
       statusSnapshot = formatStatusSnapshotFromFeed(feed)
     }
 
-    const entry = await (prisma as any).inspirationEntry.create({
-      data: {
+    const now = new Date()
+    const [entry] = await db
+      .insert(inspirationEntries)
+      .values({
         title: titleFinal,
         content,
         imageDataUrl,
         statusSnapshot,
-      },
-    })
+        updatedAt: now,
+      })
+      .returning()
 
-    await linkInspirationAssetsToEntry(prisma as any, entry.id, content)
+    await linkInspirationAssetsToEntry(entry!.id, content)
 
     return NextResponse.json({ success: true, data: entry }, { status: 201 })
   } catch (error) {
@@ -169,11 +161,10 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: '缺少有效的 id' }, { status: 400 })
     }
 
-    await (prisma as any).inspirationEntry.delete({ where: { id } })
+    await db.delete(inspirationEntries).where(eq(inspirationEntries.id, id))
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('删除灵感条目失败:', error)
     return NextResponse.json({ success: false, error: '删除失败' }, { status: 500 })
   }
 }
-

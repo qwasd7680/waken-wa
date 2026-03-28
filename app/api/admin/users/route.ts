@@ -1,7 +1,9 @@
+import { desc } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getSession, hashPassword, validatePasswordStrength } from '@/lib/auth'
-import prisma from '@/lib/prisma'
+import { db } from '@/lib/db'
+import { adminUsers } from '@/lib/drizzle-schema'
 
 async function requireAdmin() {
   const session = await getSession()
@@ -14,10 +16,14 @@ export async function GET() {
     return NextResponse.json({ success: false, error: '未授权' }, { status: 401 })
   }
 
-  const users = await prisma.adminUser.findMany({
-    orderBy: { createdAt: 'desc' },
-    select: { id: true, username: true, createdAt: true },
-  })
+  const users = await db
+    .select({
+      id: adminUsers.id,
+      username: adminUsers.username,
+      createdAt: adminUsers.createdAt,
+    })
+    .from(adminUsers)
+    .orderBy(desc(adminUsers.createdAt))
   return NextResponse.json({ success: true, data: users })
 }
 
@@ -40,10 +46,14 @@ export async function POST(request: NextRequest) {
     }
 
     const passwordHash = await hashPassword(rawPassword)
-    const user = await prisma.adminUser.create({
-      data: { username: name, passwordHash },
-      select: { id: true, username: true, createdAt: true },
-    })
+    const [user] = await db
+      .insert(adminUsers)
+      .values({ username: name, passwordHash })
+      .returning({
+        id: adminUsers.id,
+        username: adminUsers.username,
+        createdAt: adminUsers.createdAt,
+      })
     return NextResponse.json({ success: true, data: user }, { status: 201 })
   } catch (error) {
     console.error('创建管理员失败:', error)

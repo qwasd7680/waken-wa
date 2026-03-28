@@ -1,21 +1,25 @@
 import bcrypt from 'bcryptjs'
+import { count, eq } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { hashPassword, validatePasswordStrength } from '@/lib/auth'
 import { getSession } from '@/lib/auth'
+import { db, isPostgresDb } from '@/lib/db'
 import { DEFAULT_PAGE_TITLE, PAGE_TITLE_MAX_LEN } from '@/lib/default-page-title'
-import prisma from '@/lib/prisma'
+import { adminUsers, siteConfig } from '@/lib/drizzle-schema'
 import { safeSiteConfigUpsert } from '@/lib/safe-site-config-upsert'
 import { normalizeCustomCss } from '@/lib/theme-css'
 import { parseThemeCustomSurface } from '@/lib/theme-custom-surface'
 
 export async function POST(request: NextRequest) {
   try {
-    const [adminCount, existingConfig] = await Promise.all([
-      prisma.adminUser.count(),
-      (prisma as any).siteConfig.findUnique({ where: { id: 1 } }),
+    const [countRows, configRows] = await Promise.all([
+      db.select({ c: count() }).from(adminUsers),
+      db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1),
     ])
-    const hasAdmin = adminCount > 0
+    const countRow = countRows[0]
+    const existingConfig = configRows[0]
+    const hasAdmin = Number(countRow?.c ?? 0) > 0
 
     if (hasAdmin && existingConfig) {
       return NextResponse.json(
@@ -135,89 +139,93 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = await prisma.$transaction(async (tx) => {
+    const pageLockPasswordHash =
+      rawPageLockPassword.length > 0
+        ? await bcrypt.hash(rawPageLockPassword, 12)
+        : existingConfig?.pageLockPasswordHash ?? null
+
+    const passwordHashForAdmin = !hasAdmin ? await hashPassword(rawPassword) : null
+
+    const upsertPayload = {
+      where: { id: 1 },
+      update: {
+        pageTitle: normalizedPageTitle,
+        userName: normalizedUserName,
+        userBio: normalizedUserBio,
+        avatarUrl: normalizedAvatarUrl,
+        userNote: normalizedUserNote,
+        themePreset: normalizedThemePreset,
+        themeCustomSurface: normalizedThemeCustomSurface,
+        customCss: normalizedCustomCss,
+        historyWindowMinutes: normalizedHistoryWindowMinutes,
+        appMessageRules: normalizedAppMessageRules,
+        appBlacklist: normalizedAppBlacklist,
+        appWhitelist: normalizedAppWhitelist,
+        appFilterMode: normalizedAppFilterMode,
+        appNameOnlyList: normalizedAppNameOnlyList,
+        processStaleSeconds: normalizedProcessStaleSeconds,
+        pageLockEnabled: normalizedPageLockEnabled,
+        pageLockPasswordHash,
+        currentlyText: normalizedCurrentlyText,
+        earlierText: normalizedEarlierText,
+        adminText: normalizedAdminText,
+      },
+      create: {
+        id: 1,
+        pageTitle: normalizedPageTitle,
+        userName: normalizedUserName,
+        userBio: normalizedUserBio,
+        avatarUrl: normalizedAvatarUrl,
+        userNote: normalizedUserNote,
+        themePreset: normalizedThemePreset,
+        themeCustomSurface: normalizedThemeCustomSurface,
+        customCss: normalizedCustomCss,
+        historyWindowMinutes: normalizedHistoryWindowMinutes,
+        appMessageRules: normalizedAppMessageRules,
+        appBlacklist: normalizedAppBlacklist,
+        appWhitelist: normalizedAppWhitelist,
+        appFilterMode: normalizedAppFilterMode,
+        appNameOnlyList: normalizedAppNameOnlyList,
+        processStaleSeconds: normalizedProcessStaleSeconds,
+        pageLockEnabled: normalizedPageLockEnabled,
+        pageLockPasswordHash,
+        currentlyText: normalizedCurrentlyText,
+        earlierText: normalizedEarlierText,
+        adminText: normalizedAdminText,
+      },
+    }
+
+    async function applySetup(executor: typeof db) {
       let admin: { id: number; username: string } | null = null
-      if (!hasAdmin) {
-        const passwordHash = await hashPassword(rawPassword)
-        admin = await tx.adminUser.create({
-          data: {
+      if (!hasAdmin && passwordHashForAdmin) {
+        const [row] = await executor
+          .insert(adminUsers)
+          .values({
             username: normalizedUsername,
-            passwordHash,
-          },
-          select: {
-            id: true,
-            username: true,
-          },
-        })
+            passwordHash: passwordHashForAdmin,
+          })
+          .returning({ id: adminUsers.id, username: adminUsers.username })
+        admin = row ?? null
       }
-
-      const pageLockPasswordHash =
-        rawPageLockPassword.length > 0
-          ? await bcrypt.hash(rawPageLockPassword, 12)
-          : existingConfig?.pageLockPasswordHash ?? null
-
-      await safeSiteConfigUpsert(tx as any, {
-        where: { id: 1 },
-        update: {
-          pageTitle: normalizedPageTitle,
-          userName: normalizedUserName,
-          userBio: normalizedUserBio,
-          avatarUrl: normalizedAvatarUrl,
-          userNote: normalizedUserNote,
-          themePreset: normalizedThemePreset,
-          themeCustomSurface: normalizedThemeCustomSurface,
-          customCss: normalizedCustomCss,
-          historyWindowMinutes: normalizedHistoryWindowMinutes,
-          appMessageRules: normalizedAppMessageRules,
-          appBlacklist: normalizedAppBlacklist,
-          appWhitelist: normalizedAppWhitelist,
-          appFilterMode: normalizedAppFilterMode,
-          appNameOnlyList: normalizedAppNameOnlyList,
-          processStaleSeconds: normalizedProcessStaleSeconds,
-          pageLockEnabled: normalizedPageLockEnabled,
-          pageLockPasswordHash,
-          currentlyText: normalizedCurrentlyText,
-          earlierText: normalizedEarlierText,
-          adminText: normalizedAdminText,
-        },
-        create: {
-          id: 1,
-          pageTitle: normalizedPageTitle,
-          userName: normalizedUserName,
-          userBio: normalizedUserBio,
-          avatarUrl: normalizedAvatarUrl,
-          userNote: normalizedUserNote,
-          themePreset: normalizedThemePreset,
-          themeCustomSurface: normalizedThemeCustomSurface,
-          customCss: normalizedCustomCss,
-          historyWindowMinutes: normalizedHistoryWindowMinutes,
-          appMessageRules: normalizedAppMessageRules,
-          appBlacklist: normalizedAppBlacklist,
-          appWhitelist: normalizedAppWhitelist,
-          appFilterMode: normalizedAppFilterMode,
-          appNameOnlyList: normalizedAppNameOnlyList,
-          processStaleSeconds: normalizedProcessStaleSeconds,
-          pageLockEnabled: normalizedPageLockEnabled,
-          pageLockPasswordHash,
-          currentlyText: normalizedCurrentlyText,
-          earlierText: normalizedEarlierText,
-          adminText: normalizedAdminText,
-        },
-      })
-
+      await safeSiteConfigUpsert(upsertPayload, executor)
       return admin
-    })
+    }
+
+    const result = isPostgresDb()
+      ? await db.transaction(async (tx: typeof db) => applySetup(tx))
+      : await applySetup(db)
 
     return NextResponse.json(
       { success: true, data: result, adminCreated: !hasAdmin },
       { status: hasAdmin ? 200 : 201 }
     )
   } catch (error: unknown) {
+    const code = error && typeof error === 'object' && 'code' in error ? String((error as { code: string }).code) : ''
+    const msg = String((error as { message?: string })?.message ?? error ?? '')
     if (
-      error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      (error as { code: string }).code === 'P2002'
+      code === '23505' ||
+      code === 'SQLITE_CONSTRAINT_UNIQUE' ||
+      /unique constraint failed/i.test(msg)
     ) {
       return NextResponse.json(
         { success: false, error: '该用户名已被使用，请选择其他用户名' },

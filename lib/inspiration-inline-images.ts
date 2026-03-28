@@ -1,6 +1,11 @@
 /**
  * Markdown references to stored inspiration inline images (see InspirationAsset).
  */
+import { and, inArray, isNull } from 'drizzle-orm'
+
+import { db } from '@/lib/db'
+import { inspirationAssets } from '@/lib/drizzle-schema'
+
 export const INSPIRATION_IMG_URL_PREFIX = '/api/inspiration/img/'
 
 const UUID_IN_PATH_RE =
@@ -48,17 +53,13 @@ export function validateInlineImageDataUrl(dataUrl: string): { ok: true } | { ok
 
 /** Attach unlinked assets referenced in markdown to a newly created inspiration entry. */
 export async function linkInspirationAssetsToEntry(
-  prismaClient: { inspirationAsset: { updateMany: (args: unknown) => Promise<unknown> } },
   entryId: number,
-  content: string
+  content: string,
 ): Promise<void> {
   const keys = extractInspirationImagePublicKeysFromMarkdown(content)
   if (keys.length === 0) return
-  await prismaClient.inspirationAsset.updateMany({
-    where: {
-      publicKey: { in: keys },
-      inspirationEntryId: null,
-    },
-    data: { inspirationEntryId: entryId },
-  })
+  await db
+    .update(inspirationAssets)
+    .set({ inspirationEntryId: entryId })
+    .where(and(inArray(inspirationAssets.publicKey, keys), isNull(inspirationAssets.inspirationEntryId)))
 }

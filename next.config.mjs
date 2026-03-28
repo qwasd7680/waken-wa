@@ -1,4 +1,4 @@
-import { pickPostgresUrl } from './scripts/prisma-resolve-env.mjs'
+import { pickPostgresUrl } from './scripts/resolve-database-env.mjs'
 
 const _pg = pickPostgresUrl()
 if (_pg && !process.env.DATABASE_URL?.trim()) {
@@ -11,7 +11,7 @@ const nextConfig = {
   transpilePackages: ['ical.js'],
   serverExternalPackages: ['pg', 'better-sqlite3'],
   outputFileTracingIncludes: {
-    '/*': ['./generated/prisma/**/*'],
+    '/*': ['./drizzle/**/*'],
   },
   typescript: {
     ignoreBuildErrors: false,

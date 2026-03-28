@@ -1,4 +1,7 @@
-import prisma from '@/lib/prisma'
+import { count, eq } from 'drizzle-orm'
+
+import { db } from '@/lib/db'
+import { adminUsers, siteConfig } from '@/lib/drizzle-schema'
 import type { SetupInitialConfig } from '@/types/components'
 import type { AdminSetupSnapshot } from '@/types/setup'
 
@@ -22,13 +25,14 @@ export type { AdminSetupSnapshot } from '@/types/setup'
 
 /** Single DB round-trip for setup page and status checks. */
 export async function getAdminSetupSnapshot(): Promise<AdminSetupSnapshot> {
-  const [adminCount, row] = await Promise.all([
-    prisma.adminUser.count(),
-    prisma.siteConfig.findUnique({ where: { id: 1 } }),
+  const [[adminCountRow], [row]] = await Promise.all([
+    db.select({ c: count() }).from(adminUsers),
+    db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1),
   ])
+  const adminCount = Number(adminCountRow?.c ?? 0)
   const hasAdmin = adminCount > 0
   return {
-    isConfigOK: hasAdmin && row !== null,
+    isConfigOK: hasAdmin && row !== undefined,
     hasAdmin,
     initialConfig: row ? siteRowToSetupInitial(row) : undefined,
   }

@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto'
 
-import prisma from '@/lib/prisma'
+import { and, eq } from 'drizzle-orm'
+
+import { db } from '@/lib/db'
+import { apiTokens } from '@/lib/drizzle-schema'
 
 const STORED_HASH_PREFIX = 'h$'
 
@@ -31,29 +34,31 @@ export async function findActiveApiTokenBySecret(plainSecret: string) {
 
   const hashedForm = storedFormFromPlainSecret(trimmed)
 
-  const byHash = await prisma.apiToken.findFirst({
-    where: { token: hashedForm, isActive: true },
-  })
+  const [byHash] = await db
+    .select()
+    .from(apiTokens)
+    .where(and(eq(apiTokens.token, hashedForm), eq(apiTokens.isActive, true)))
+    .limit(1)
   if (byHash) return byHash
 
-  const legacy = await prisma.apiToken.findFirst({
-    where: { token: trimmed, isActive: true },
-  })
+  const [legacy] = await db
+    .select()
+    .from(apiTokens)
+    .where(and(eq(apiTokens.token, trimmed), eq(apiTokens.isActive, true)))
+    .limit(1)
   if (!legacy) return null
 
-  await prisma.apiToken.update({
-    where: { id: legacy.id },
-    data: { token: hashedForm },
-  })
+  await db.update(apiTokens).set({ token: hashedForm }).where(eq(apiTokens.id, legacy.id))
 
-  return prisma.apiToken.findUnique({ where: { id: legacy.id } })
+  const [row] = await db.select().from(apiTokens).where(eq(apiTokens.id, legacy.id)).limit(1)
+  return row ?? null
 }
 
 export async function touchApiTokenLastUsed(id: number) {
-  await prisma.apiToken.update({
-    where: { id },
-    data: { lastUsedAt: new Date() },
-  })
+  await db
+    .update(apiTokens)
+    .set({ lastUsedAt: new Date() })
+    .where(eq(apiTokens.id, id))
 }
 
 /** Resolve Bearer secret to token id and bump lastUsedAt. */

@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getBearerApiTokenRecord, getSession } from '@/lib/auth'
+import { db } from '@/lib/db'
+import { inspirationAssets } from '@/lib/drizzle-schema'
 import { gateInspirationApiForDevice } from '@/lib/inspiration-device-allowlist'
 import {
   inspirationInlineImageUrl,
   validateInlineImageDataUrl,
 } from '@/lib/inspiration-inline-images'
-import prisma from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -23,7 +24,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     if (!session && apiToken) {
       const gate = await gateInspirationApiForDevice(
-        prisma,
         apiToken.id,
         request,
         body && typeof body === 'object' ? (body as Record<string, unknown>) : null,
@@ -47,24 +47,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: check.error }, { status: 400 })
     }
 
-    const row = await (prisma as any).inspirationAsset.create({
-      data: {
+    const [row] = await db
+      .insert(inspirationAssets)
+      .values({
         imageDataUrl,
         inspirationEntryId: null,
-      },
-    })
+      })
+      .returning()
 
-    const url = inspirationInlineImageUrl(row.publicKey)
+    const url = inspirationInlineImageUrl(String(row!.publicKey))
 
     return NextResponse.json(
       {
         success: true,
         data: {
-          publicKey: row.publicKey,
+          publicKey: row!.publicKey,
           url,
         },
       },
-      { status: 201 }
+      { status: 201 },
     )
   } catch (error) {
     console.error('inspiration asset upload failed:', error)

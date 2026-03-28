@@ -1,4 +1,7 @@
-import prisma from '@/lib/prisma'
+import { eq } from 'drizzle-orm'
+
+import { db } from '@/lib/db'
+import { siteConfig } from '@/lib/drizzle-schema'
 import type { HCaptchaConfig } from '@/types/hcaptcha'
 
 export type { HCaptchaConfig } from '@/types/hcaptcha'
@@ -31,15 +34,15 @@ function resolveHCaptchaKeys(dbConfig: Record<string, unknown> | null): {
 
 /** Public config safe to send to the client (no secret key). */
 export async function getHCaptchaPublicConfig(): Promise<HCaptchaConfig> {
-  const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
-  const resolved = resolveHCaptchaKeys(config)
+  const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
+  const resolved = resolveHCaptchaKeys(config as Record<string, unknown> | null)
   return { enabled: resolved.enabled, siteKey: resolved.siteKey }
 }
 
 /** Verify hCaptcha response token server-side. Returns true if valid or captcha is disabled. */
 export async function verifyHCaptchaIfEnabled(responseToken: string | undefined): Promise<boolean> {
-  const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
-  const resolved = resolveHCaptchaKeys(config)
+  const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
+  const resolved = resolveHCaptchaKeys(config as Record<string, unknown> | null)
   if (!resolved.enabled) return true
   if (!responseToken) return false
 

@@ -1,9 +1,11 @@
 import bcrypt from 'bcryptjs'
+import { eq } from 'drizzle-orm'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { createSession, getSession, validatePasswordStrength } from '@/lib/auth'
-import prisma from '@/lib/prisma'
+import { db } from '@/lib/db'
+import { adminUsers } from '@/lib/drizzle-schema'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,9 +26,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: pwError }, { status: 400 })
   }
 
-  const admin = await prisma.adminUser.findUnique({
-    where: { id: session.userId },
-  })
+  const [admin] = await db.select().from(adminUsers).where(eq(adminUsers.id, session.userId)).limit(1)
 
   if (!admin) {
     return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 })
@@ -38,10 +38,7 @@ export async function POST(request: NextRequest) {
   }
 
   const newHash = await bcrypt.hash(newPassword, 12)
-  await prisma.adminUser.update({
-    where: { id: session.userId },
-    data: { passwordHash: newHash },
-  })
+  await db.update(adminUsers).set({ passwordHash: newHash }).where(eq(adminUsers.id, session.userId))
 
   // Issue a fresh session token; the old token on other devices remains valid
   // until it expires (7d). Full revocation would require a token blacklist.

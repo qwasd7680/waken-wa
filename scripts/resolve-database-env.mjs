@@ -1,5 +1,5 @@
 /**
- * Shared: load .env / .env.local, pick SQLite vs PostgreSQL schema, normalize DATABASE_URL.
+ * Shared: load .env / .env.local, pick SQLite vs PostgreSQL, normalize DATABASE_URL for Drizzle.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -41,25 +41,25 @@ export function isPostgresUrl(s) {
   return t.length > 0 && /^postgres(ql)?:\/\//i.test(t)
 }
 
-/** App / build / generate / push: pooled URL first. */
+/** App / build / push: pooled URL first. */
 export function pickPostgresUrl() {
-  const prisma = process.env.POSTGRES_PRISMA_URL?.trim()
+  const pooled = process.env.POSTGRES_PRISMA_URL?.trim()
   const a = process.env.DATABASE_URL?.trim()
   const b = process.env.POSTGRES_URL?.trim()
-  if (isPostgresUrl(prisma)) return prisma
+  if (isPostgresUrl(pooled)) return pooled
   if (isPostgresUrl(a)) return a
   if (isPostgresUrl(b)) return b
   return null
 }
 
-/** `pnpm db:init` / postinstall: prefer direct (non-pooling) for `db push`. */
+/** `pnpm db:init` / postinstall: prefer direct (non-pooling) for migrations push. */
 export function pickPostgresUrlForInitDb() {
   const np = process.env.POSTGRES_URL_NON_POOLING?.trim()
-  const prisma = process.env.POSTGRES_PRISMA_URL?.trim()
+  const pooled = process.env.POSTGRES_PRISMA_URL?.trim()
   const a = process.env.DATABASE_URL?.trim()
   const b = process.env.POSTGRES_URL?.trim()
   if (isPostgresUrl(np)) return np
-  if (isPostgresUrl(prisma)) return prisma
+  if (isPostgresUrl(pooled)) return pooled
   if (isPostgresUrl(a)) return a
   if (isPostgresUrl(b)) return b
   return null
@@ -67,10 +67,10 @@ export function pickPostgresUrlForInitDb() {
 
 /**
  * Loads .env then .env.local (same order as Next). Mutates process.env.DATABASE_URL when using PG.
- * @param {{ forInitDb?: boolean }} [options] - If true (init-db / postinstall), URL order prefers POSTGRES_URL_NON_POOLING.
- * @returns {{ schemaRel: string, provider: string }}
+ * @param {{ forInitDb?: boolean, forceProvider?: 'sqlite' | 'postgresql' }} [options]
+ * @returns {{ drizzleConfig: string, provider: string }}
  */
-export function resolvePrismaEnv(options = {}) {
+export function resolveDatabaseEnv(options = {}) {
   const forInitDb = options.forInitDb === true
   const pick = forInitDb ? pickPostgresUrlForInitDb : pickPostgresUrl
 
@@ -79,18 +79,25 @@ export function resolvePrismaEnv(options = {}) {
 
   const inferredPostgres = pick() !== null
   const explicitPostgres = (process.env.DATABASE_PROVIDER || '').toLowerCase() === 'postgresql'
-  const provider =
+  let provider =
     inferredPostgres || explicitPostgres
       ? 'postgresql'
       : (process.env.DATABASE_PROVIDER || 'sqlite').toLowerCase()
 
-  const schemaRel =
-    provider === 'postgresql' ? 'prisma/schema.postgres.prisma' : 'prisma/schema.prisma'
+  if (options.forceProvider === 'postgresql') {
+    provider = 'postgresql'
+  }
+  if (options.forceProvider === 'sqlite') {
+    provider = 'sqlite'
+  }
+
+  const drizzleConfig =
+    provider === 'postgresql' ? 'drizzle.config.pg.ts' : 'drizzle.config.sqlite.ts'
 
   if (provider === 'sqlite') {
     if (!process.env.DATABASE_URL?.trim()) {
       process.env.DATABASE_URL = 'file:./prisma/dev.db'
-      console.log('[prisma-env] DATABASE_URL unset; using default file:./prisma/dev.db')
+      console.log('[db-env] DATABASE_URL unset; using default file:./prisma/dev.db')
     }
   } else {
     const pgUrl = pick()
@@ -104,5 +111,5 @@ export function resolvePrismaEnv(options = {}) {
     process.env.DATABASE_URL = pgUrl
   }
 
-  return { schemaRel, provider }
+  return { drizzleConfig, provider }
 }

@@ -1,3 +1,4 @@
+import { and, eq } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getActivityFeedData } from '@/lib/activity-feed'
@@ -9,7 +10,8 @@ import {
 } from '@/lib/activity-store'
 import { resolveActiveApiTokenFromPlainSecret } from '@/lib/api-token-secret'
 import { getSession, isSiteLockSatisfied } from '@/lib/auth'
-import prisma from '@/lib/prisma'
+import { db } from '@/lib/db'
+import { devices, siteConfig, userActivities } from '@/lib/drizzle-schema'
 import { persistMinutesToExpiresAt } from '@/lib/user-activity-persist'
 
 export const dynamic = 'force-dynamic'
@@ -34,7 +36,7 @@ export async function GET(request: NextRequest) {
       if (!siteLockOk) {
         return NextResponse.json(
           { success: false, error: '请先解锁页面' },
-          { status: 403 }
+          { status: 403 },
         )
       }
       const feed = await getActivityFeedData(50)
@@ -58,7 +60,7 @@ export async function GET(request: NextRequest) {
     console.error('获取活动日志失败:', error)
     return NextResponse.json(
       { success: false, error: '获取活动日志失败' },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }
@@ -70,10 +72,10 @@ export async function POST(request: NextRequest) {
     if (!tokenInfo) {
       return NextResponse.json(
         { success: false, error: '无效的 API Token' },
-        { status: 401 }
+        { status: 401 },
       )
     }
-    
+
     const body = await request.json()
     const generatedHashKeyRaw = body?.generatedHashKey
     const deviceRaw = body?.device
@@ -150,32 +152,38 @@ export async function POST(request: NextRequest) {
     if (!generatedHashKey || !process_name) {
       return NextResponse.json(
         { success: false, error: '缺少必要字段: generatedHashKey, process_name' },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
-    let deviceRecord = await (prisma as any).device.findUnique({
-      where: { generatedHashKey },
-    })
+    let [deviceRecord] = await db
+      .select()
+      .from(devices)
+      .where(eq(devices.generatedHashKey, generatedHashKey))
+      .limit(1)
 
     if (!deviceRecord) {
-      const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
+      const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
       const autoAccept = Boolean(config?.autoAcceptNewDevices)
       const createdStatus = autoAccept ? 'active' : 'pending'
-      deviceRecord = await (prisma as any).device.create({
-        data: {
+      const now = new Date()
+      const [created] = await db
+        .insert(devices)
+        .values({
           generatedHashKey,
           displayName: device || 'Unknown Device',
           status: createdStatus,
           apiTokenId: tokenInfo.id,
-          lastSeenAt: autoAccept ? new Date() : null,
-        },
-      })
+          lastSeenAt: autoAccept ? now : null,
+          updatedAt: now,
+        })
+        .returning()
+      deviceRecord = created!
 
       if (!autoAccept) {
         return NextResponse.json(
           { success: false, error: '设备待后台审核后可用', pending: true },
-          { status: 202 }
+          { status: 202 },
         )
       }
     }
@@ -183,20 +191,20 @@ export async function POST(request: NextRequest) {
     if (deviceRecord.status === 'pending') {
       return NextResponse.json(
         { success: false, error: '设备待后台审核后可用', pending: true },
-        { status: 202 }
+        { status: 202 },
       )
     }
 
     if (deviceRecord.status !== 'active') {
       return NextResponse.json(
         { success: false, error: '设备不可用或不存在' },
-        { status: 403 }
+        { status: 403 },
       )
     }
     if (deviceRecord.apiTokenId && deviceRecord.apiTokenId !== tokenInfo.id) {
       return NextResponse.json(
         { success: false, error: '该设备未绑定当前 Token' },
-        { status: 403 }
+        { status: 403 },
       )
     }
 
@@ -214,32 +222,34 @@ export async function POST(request: NextRequest) {
         [USER_PERSIST_EXPIRES_AT_METADATA_KEY]: expiresAt.toISOString(),
         [USER_ACTIVITY_DB_SYNCED_METADATA_KEY]: true,
       }
-      await (prisma as any).userActivity.upsert({
-        where: {
-          deviceId_processName: {
-            deviceId: deviceRecord.id,
-            processName: process_name,
-          },
-        },
-        create: {
+      const now = new Date()
+      await db
+        .insert(userActivities)
+        .values({
           deviceId: deviceRecord.id,
           generatedHashKey,
           processName: process_name,
           processTitle: process_title,
-          metadata: finalMetadata ?? undefined,
+          metadata: finalMetadata,
           expiresAt,
-        },
-        update: {
-          generatedHashKey,
-          processTitle: process_title,
-          metadata: finalMetadata ?? undefined,
-          expiresAt,
-        },
-      })
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [userActivities.deviceId, userActivities.processName],
+          set: {
+            generatedHashKey,
+            processTitle: process_title,
+            metadata: finalMetadata,
+            expiresAt,
+            updatedAt: now,
+          },
+        })
     } else {
-      await (prisma as any).userActivity.deleteMany({
-        where: { deviceId: deviceRecord.id, processName: process_name },
-      })
+      await db
+        .delete(userActivities)
+        .where(
+          and(eq(userActivities.deviceId, deviceRecord.id), eq(userActivities.processName, process_name)),
+        )
       finalMetadata = { ...(finalMetadata || {}) }
       if (isActivePush && !expiresAt) {
         finalMetadata.pushMode = 'realtime'
@@ -255,10 +265,15 @@ export async function POST(request: NextRequest) {
       metadata: finalMetadata,
     })
 
-    await (prisma as any).device.update({
-      where: { id: deviceRecord.id },
-      data: { displayName: device || deviceRecord.displayName, lastSeenAt: new Date() },
-    })
+    const seenAt = new Date()
+    await db
+      .update(devices)
+      .set({
+        displayName: device || deviceRecord.displayName,
+        lastSeenAt: seenAt,
+        updatedAt: seenAt,
+      })
+      .where(eq(devices.id, deviceRecord.id))
 
     return NextResponse.json({
       success: true,
@@ -268,7 +283,7 @@ export async function POST(request: NextRequest) {
     console.error('上报活动失败:', error)
     return NextResponse.json(
       { success: false, error: '上报活动失败' },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

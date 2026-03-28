@@ -22,19 +22,19 @@ fi
 
 export DATABASE_URL="${DATABASE_URL:-file:/app/data/dev.db}"
 
-run() {
-  npx prisma db push --schema prisma/schema.prisma
-  exec node server.js
+start_app() {
+  pnpm exec drizzle-kit push --config drizzle.config.sqlite.ts
+  exec pnpm exec next start -H 0.0.0.0 -p "${PORT:-3000}"
 }
 
 if [ "$(id -u)" = 0 ]; then
   exec runuser -u nextjs -- env \
     DATABASE_URL="$DATABASE_URL" \
     JWT_SECRET="$JWT_SECRET" \
-    HOSTNAME="${HOSTNAME:-0.0.0.0}" \
     PORT="${PORT:-3000}" \
     NODE_ENV="${NODE_ENV:-production}" \
-    sh -ec 'cd /app && npx prisma db push --schema prisma/schema.prisma && exec node server.js'
+    HOME=/tmp \
+    sh -ec 'cd /app && pnpm exec drizzle-kit push --config drizzle.config.sqlite.ts && exec pnpm exec next start -H 0.0.0.0 -p "${PORT:-3000}"'
 else
-  run
+  start_app
 fi

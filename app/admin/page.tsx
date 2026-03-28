@@ -1,9 +1,11 @@
+import { count } from 'drizzle-orm'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 
 import { AdminDashboard } from '@/components/admin/dashboard'
 import { verifySession } from '@/lib/auth'
-import prisma from '@/lib/prisma'
+import { db } from '@/lib/db'
+import { adminUsers } from '@/lib/drizzle-schema'
 
 // 强制动态渲染，确保每次请求都获取最新数据
 export const dynamic = 'force-dynamic'
@@ -30,7 +32,8 @@ export default async function AdminPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const hasAdmin = (await prisma.adminUser.count()) > 0
+  const [cntRow] = await db.select({ c: count() }).from(adminUsers)
+  const hasAdmin = Number(cntRow?.c ?? 0) > 0
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value
 

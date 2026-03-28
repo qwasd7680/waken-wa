@@ -1,13 +1,14 @@
 import { randomBytes } from 'node:crypto'
 
 import bcrypt from 'bcryptjs'
-import { jwtVerify,SignJWT } from 'jose'
+import { eq } from 'drizzle-orm'
+import { jwtVerify, SignJWT } from 'jose'
 import { cookies } from 'next/headers'
 
 import { findActiveApiTokenBySecret, resolveActiveApiTokenFromPlainSecret } from '@/lib/api-token-secret'
+import { db } from '@/lib/db'
+import { adminUsers, siteConfig, systemSecrets } from '@/lib/drizzle-schema'
 import type { SessionPayload } from '@/types/auth'
-
-import prisma from './prisma'
 
 export type { SessionPayload } from '@/types/auth'
 
@@ -33,24 +34,24 @@ async function getJwtSecretBytes(): Promise<Uint8Array> {
   }
 
   try {
-    const row = await prisma.systemSecret.findUnique({
-      where: { key: JWT_SECRET_DB_KEY },
-    })
+    const [row] = await db
+      .select()
+      .from(systemSecrets)
+      .where(eq(systemSecrets.key, JWT_SECRET_DB_KEY))
+      .limit(1)
     if (row) {
       cachedJwtSecret = new TextEncoder().encode(row.value)
       return cachedJwtSecret
     }
 
     const generated = randomBytes(48).toString('base64url')
-    await prisma.systemSecret.upsert({
-      where: { key: JWT_SECRET_DB_KEY },
-      update: {},
-      create: { key: JWT_SECRET_DB_KEY, value: generated },
-    })
+    await db.insert(systemSecrets).values({ key: JWT_SECRET_DB_KEY, value: generated }).onConflictDoNothing()
 
-    const saved = await prisma.systemSecret.findUnique({
-      where: { key: JWT_SECRET_DB_KEY },
-    })
+    const [saved] = await db
+      .select()
+      .from(systemSecrets)
+      .where(eq(systemSecrets.key, JWT_SECRET_DB_KEY))
+      .limit(1)
     const finalValue = saved?.value ?? generated
     cachedJwtSecret = new TextEncoder().encode(finalValue)
     return cachedJwtSecret
@@ -120,7 +121,7 @@ export async function getSession(): Promise<SessionPayload | null> {
 
 /** Returns true if the visitor has passed the site lock (or lock is disabled). */
 export async function isSiteLockSatisfied(): Promise<boolean> {
-  const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
+  const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
   if (!config?.pageLockEnabled) return true
   const cookieStore = await cookies()
   const token = cookieStore.get('site_lock')?.value
@@ -152,20 +153,22 @@ export function validatePasswordStrength(password: string): string | null {
 
 export async function authenticateAdmin(
   username: string,
-  password: string
+  password: string,
 ): Promise<{ id: number; username: string } | null> {
-  const user = await prisma.adminUser.findUnique({
-    where: { username }
-  })
-  
+  const [user] = await db
+    .select()
+    .from(adminUsers)
+    .where(eq(adminUsers.username, username))
+    .limit(1)
+
   if (!user) {
     // Perform a dummy bcrypt compare to prevent timing-based user enumeration
     await bcrypt.compare(password, await getDummyHash())
     return null
   }
-  
+
   const isValid = await verifyPassword(password, user.passwordHash)
   if (!isValid) return null
-  
+
   return { id: user.id, username: user.username }
 }

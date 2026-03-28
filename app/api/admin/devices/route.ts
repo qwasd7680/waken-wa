@@ -1,10 +1,12 @@
 import { createHash, randomBytes } from 'node:crypto'
 
+import { count, desc, eq, getTableColumns, sql } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getSession } from '@/lib/auth'
+import { db } from '@/lib/db'
 import { WEB_ADMIN_QUICK_ADD_DEVICE_HASH_KEY } from '@/lib/device-constants'
-import prisma from '@/lib/prisma'
+import { apiTokens, devices } from '@/lib/drizzle-schema'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -32,32 +34,56 @@ export async function GET(request: NextRequest) {
     const status = String(searchParams.get('status') ?? '').trim()
     const q = String(searchParams.get('q') ?? '').trim()
 
-    const where: any = {}
-    if (status) where.status = status
-    if (q) {
-      where.OR = [
-        { displayName: { contains: q, mode: 'insensitive' } },
-        { generatedHashKey: { contains: q, mode: 'insensitive' } },
-      ]
+    const filters: ReturnType<typeof sql>[] = []
+    if (status) {
+      filters.push(sql`${devices.status} = ${status}`)
     }
+    if (q) {
+      const pattern = `%${q}%`
+      filters.push(
+        sql`(lower(${devices.displayName}) like lower(${pattern}) or lower(${devices.generatedHashKey}) like lower(${pattern}))`,
+      )
+    }
+    const whereClause = filters.length ? sql.join(filters, sql` and `) : undefined
 
-    const [items, total] = await Promise.all([
-      (prisma as any).device.findMany({
-        where,
-        include: {
-          apiToken: { select: { id: true, name: true, isActive: true } },
-        },
-        orderBy: [{ updatedAt: 'desc' }],
-        take: limit,
-        skip: offset,
-      }),
-      (prisma as any).device.count({ where }),
+    const baseCols = getTableColumns(devices)
+    const baseList = db
+      .select({
+        ...baseCols,
+        tId: apiTokens.id,
+        tName: apiTokens.name,
+        tActive: apiTokens.isActive,
+      })
+      .from(devices)
+      .leftJoin(apiTokens, eq(devices.apiTokenId, apiTokens.id))
+    const baseCount = db.select({ c: count() }).from(devices)
+
+    const [rows, [totalRow]] = await Promise.all([
+      (whereClause ? baseList.where(whereClause) : baseList)
+        .orderBy(desc(devices.updatedAt))
+        .limit(limit)
+        .offset(offset),
+      whereClause ? baseCount.where(whereClause) : baseCount,
     ])
+
+    const items = rows.map(
+      ({ tId, tName, tActive, ...rest }: Record<string, unknown> & {
+        tId: number | null
+        tName: string | null
+        tActive: boolean | null
+      }) => ({
+      ...rest,
+      apiToken:
+        tId != null && tName != null
+          ? { id: tId, name: tName, isActive: Boolean(tActive) }
+          : null,
+    }),
+    )
 
     return NextResponse.json({
       success: true,
       data: items,
-      pagination: { limit, offset, total },
+      pagination: { limit, offset, total: Number(totalRow?.c ?? 0) },
     })
   } catch (error) {
     console.error('获取设备列表失败:', error)
@@ -83,7 +109,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (apiTokenId) {
-      const token = await prisma.apiToken.findUnique({ where: { id: apiTokenId } })
+      const [token] = await db.select().from(apiTokens).where(eq(apiTokens.id, apiTokenId)).limit(1)
       if (!token) {
         return NextResponse.json({ success: false, error: '绑定的 Token 不存在' }, { status: 400 })
       }
@@ -96,16 +122,20 @@ export async function POST(request: NextRequest) {
       if (customKey === WEB_ADMIN_QUICK_ADD_DEVICE_HASH_KEY) {
         return NextResponse.json(
           { success: false, error: '该 Key 为系统预留（Web 后台快速添加），不可手动占用' },
-          { status: 400 }
+          { status: 400 },
         )
       }
       if (customKey.length > 128 || customKey.length < 8) {
         return NextResponse.json(
           { success: false, error: '自定义 GeneratedHashKey 长度需在 8～128 之间' },
-          { status: 400 }
+          { status: 400 },
         )
       }
-      const taken = await (prisma as any).device.findUnique({ where: { generatedHashKey: customKey } })
+      const [taken] = await db
+        .select()
+        .from(devices)
+        .where(eq(devices.generatedHashKey, customKey))
+        .limit(1)
       if (taken) {
         return NextResponse.json({ success: false, error: '该 GeneratedHashKey 已被使用' }, { status: 400 })
       }
@@ -113,23 +143,31 @@ export async function POST(request: NextRequest) {
 
     let generatedHashKey = customKey || generateHashKey(displayName)
     if (!customKey) {
-      // very low collision chance, but keep a bounded retry for safety
       for (let i = 0; i < 3; i++) {
-        const exists = await (prisma as any).device.findUnique({ where: { generatedHashKey } })
+        const [exists] = await db
+          .select()
+          .from(devices)
+          .where(eq(devices.generatedHashKey, generatedHashKey))
+          .limit(1)
         if (!exists) break
         generatedHashKey = generateHashKey(`${displayName}:${i}`)
       }
     }
 
-    const item = await (prisma as any).device.create({
-      data: {
+    const now = new Date()
+    const [item] = await db
+      .insert(devices)
+      .values({
         displayName,
         generatedHashKey,
         status: 'active',
         apiTokenId,
-        ...(typeof body?.showSteamNowPlaying === 'boolean' ? { showSteamNowPlaying: body.showSteamNowPlaying } : {}),
-      },
-    })
+        ...(typeof body?.showSteamNowPlaying === 'boolean'
+          ? { showSteamNowPlaying: body.showSteamNowPlaying }
+          : {}),
+        updatedAt: now,
+      })
+      .returning()
 
     return NextResponse.json({ success: true, data: item }, { status: 201 })
   } catch (error) {
@@ -151,7 +189,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, error: '缺少有效的 id' }, { status: 400 })
     }
 
-    const data: any = {}
+    const data: Record<string, unknown> = {}
     if (typeof body?.displayName === 'string') {
       const displayName = body.displayName.trim()
       if (!displayName) {
@@ -170,7 +208,7 @@ export async function PATCH(request: NextRequest) {
       data.apiTokenId = null
     } else if (typeof body?.apiTokenId === 'number' && Number.isFinite(body.apiTokenId)) {
       const tokenId = Math.floor(body.apiTokenId)
-      const token = await prisma.apiToken.findUnique({ where: { id: tokenId } })
+      const [token] = await db.select().from(apiTokens).where(eq(apiTokens.id, tokenId)).limit(1)
       if (!token) {
         return NextResponse.json({ success: false, error: '绑定的 Token 不存在' }, { status: 400 })
       }
@@ -184,10 +222,13 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, error: '没有可更新的字段' }, { status: 400 })
     }
 
-    const item = await (prisma as any).device.update({
-      where: { id },
-      data,
-    })
+    data.updatedAt = new Date()
+
+    const [item] = await db
+      .update(devices)
+      .set(data as Record<string, never>)
+      .where(eq(devices.id, id))
+      .returning()
 
     return NextResponse.json({ success: true, data: item })
   } catch (error) {
@@ -209,11 +250,10 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: '缺少有效的 id' }, { status: 400 })
     }
 
-    await (prisma as any).device.delete({ where: { id } })
+    await db.delete(devices).where(eq(devices.id, id))
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('删除设备失败:', error)
     return NextResponse.json({ success: false, error: '删除失败' }, { status: 500 })
   }
 }
-

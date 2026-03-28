@@ -1,12 +1,14 @@
 import { format } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
+import { eq } from 'drizzle-orm'
 import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { MarkdownContent } from '@/components/admin/markdown-content'
 import { ContentReadingPanel } from '@/components/content-reading-panel'
-import prisma from '@/lib/prisma'
+import { db } from '@/lib/db'
+import { inspirationEntries } from '@/lib/drizzle-schema'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,10 +21,11 @@ export async function generateMetadata({
   const id = parseInt(raw, 10)
   if (!Number.isFinite(id)) return { title: '随想录' }
 
-  const row = await (prisma as any).inspirationEntry.findUnique({
-    where: { id },
-    select: { title: true },
-  })
+  const [row] = await db
+    .select({ title: inspirationEntries.title })
+    .from(inspirationEntries)
+    .where(eq(inspirationEntries.id, id))
+    .limit(1)
   const t = row?.title?.trim()
   return { title: t ? `${t} · 随想录` : '随想录' }
 }
@@ -36,9 +39,7 @@ export default async function InspirationDetailPage({
   const id = parseInt(raw, 10)
   if (!Number.isFinite(id)) notFound()
 
-  const row = await (prisma as any).inspirationEntry.findUnique({
-    where: { id },
-  })
+  const [row] = await db.select().from(inspirationEntries).where(eq(inspirationEntries.id, id)).limit(1)
   if (!row) notFound()
 
   const createdAt = row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt)

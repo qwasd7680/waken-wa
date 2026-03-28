@@ -1,4 +1,7 @@
-import prisma from '@/lib/prisma'
+import { and, eq, inArray } from 'drizzle-orm'
+
+import { db } from '@/lib/db'
+import { devices } from '@/lib/drizzle-schema'
 import {
   fetchSteamPlayersByIds,
   isValidSteamId,
@@ -44,7 +47,7 @@ async function fetchPlayersCached(steamIds: string[], apiKey: string): Promise<M
  */
 export async function getSteamNowPlayingByDeviceHashes(
   deviceHashes: string[],
-  options: { steamEnabled: boolean; apiKey: string; siteSteamId: string }
+  options: { steamEnabled: boolean; apiKey: string; siteSteamId: string },
 ): Promise<Map<string, SteamNowPlayingInfo>> {
   const out = new Map<string, SteamNowPlayingInfo>()
   const uniqueHashes = [...new Set(deviceHashes.map((h) => h.trim()).filter(Boolean))]
@@ -54,21 +57,20 @@ export async function getSteamNowPlayingByDeviceHashes(
   const siteId = options.siteSteamId.trim()
   if (!apiKey || !siteId || !isValidSteamId(siteId)) return out
 
-  const devices = await (prisma as any).device.findMany({
-    where: {
-      generatedHashKey: { in: uniqueHashes },
-      showSteamNowPlaying: true,
-    },
-    select: { generatedHashKey: true },
-  })
-  if (devices.length === 0) return out
+  const rows = await db
+    .select({ generatedHashKey: devices.generatedHashKey })
+    .from(devices)
+    .where(
+      and(inArray(devices.generatedHashKey, uniqueHashes), eq(devices.showSteamNowPlaying, true)),
+    )
+  if (rows.length === 0) return out
 
   const players = await fetchPlayersCached([siteId], apiKey)
   const player = players.get(siteId)
   const playing = player ? steamPlayerToNowPlaying(player) : null
   if (!playing) return out
 
-  for (const d of devices) {
+  for (const d of rows) {
     out.set(d.generatedHashKey, playing)
   }
 

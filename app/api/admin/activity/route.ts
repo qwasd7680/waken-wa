@@ -1,3 +1,4 @@
+import { and, eq } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
 
 import {
@@ -8,8 +9,9 @@ import {
   USER_PERSIST_EXPIRES_AT_METADATA_KEY,
 } from '@/lib/activity-store'
 import { getSession } from '@/lib/auth'
+import { db } from '@/lib/db'
 import { WEB_ADMIN_QUICK_ADD_DEVICE_HASH_KEY } from '@/lib/device-constants'
-import prisma from '@/lib/prisma'
+import { devices, userActivities } from '@/lib/drizzle-schema'
 
 // 强制动态渲染，禁用缓存
 export const dynamic = 'force-dynamic'
@@ -126,7 +128,7 @@ export async function POST(request: NextRequest) {
     if (!process_name) {
       return NextResponse.json(
         { success: false, error: '缺少必要字段: process_name' },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
@@ -136,27 +138,31 @@ export async function POST(request: NextRequest) {
     if (generatedHashKey.length > 128) {
       return NextResponse.json(
         { success: false, error: 'GeneratedHashKey 长度不能超过 128' },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
     if (!generatedHashKey) {
-      await (prisma as any).device.upsert({
-        where: { generatedHashKey: WEB_ADMIN_QUICK_ADD_DEVICE_HASH_KEY },
-        create: {
+      const now = new Date()
+      await db
+        .insert(devices)
+        .values({
           generatedHashKey: WEB_ADMIN_QUICK_ADD_DEVICE_HASH_KEY,
           displayName: 'Web (后台快速添加)',
           status: 'active',
-        },
-        update: {
-          status: 'active',
-        },
-      })
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: devices.generatedHashKey,
+          set: { status: 'active', updatedAt: now },
+        })
     }
 
-    const deviceRecord = await (prisma as any).device.findUnique({
-      where: { generatedHashKey: effectiveHashKey },
-    })
+    const [deviceRecord] = await db
+      .select()
+      .from(devices)
+      .where(eq(devices.generatedHashKey, effectiveHashKey))
+      .limit(1)
     if (!deviceRecord || deviceRecord.status !== 'active') {
       return NextResponse.json(
         {
@@ -164,37 +170,39 @@ export async function POST(request: NextRequest) {
           error:
             '设备不可用或不存在。请在「设备管理」中创建设备并复制 GeneratedHashKey，或使用留空以使用 Web 预留设备。',
         },
-        { status: 403 }
+        { status: 403 },
       )
     }
 
     if (adminPersistSeconds != null && adminExpiresAt) {
-      await (prisma as any).userActivity.upsert({
-        where: {
-          deviceId_processName: {
-            deviceId: deviceRecord.id,
-            processName: process_name,
-          },
-        },
-        create: {
+      const now = new Date()
+      await db
+        .insert(userActivities)
+        .values({
           deviceId: deviceRecord.id,
           generatedHashKey: effectiveHashKey,
           processName: process_name,
           processTitle: process_title,
-          metadata: finalMetadata ?? undefined,
+          metadata: finalMetadata,
           expiresAt: adminExpiresAt,
-        },
-        update: {
-          generatedHashKey: effectiveHashKey,
-          processTitle: process_title,
-          metadata: finalMetadata ?? undefined,
-          expiresAt: adminExpiresAt,
-        },
-      })
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [userActivities.deviceId, userActivities.processName],
+          set: {
+            generatedHashKey: effectiveHashKey,
+            processTitle: process_title,
+            metadata: finalMetadata,
+            expiresAt: adminExpiresAt,
+            updatedAt: now,
+          },
+        })
     } else {
-      await (prisma as any).userActivity.deleteMany({
-        where: { deviceId: deviceRecord.id, processName: process_name },
-      })
+      await db
+        .delete(userActivities)
+        .where(
+          and(eq(userActivities.deviceId, deviceRecord.id), eq(userActivities.processName, process_name)),
+        )
     }
 
     const entry = upsertActivity({
@@ -206,17 +214,22 @@ export async function POST(request: NextRequest) {
       metadata: finalMetadata,
     })
 
-    await (prisma as any).device.update({
-      where: { id: deviceRecord.id },
-      data: { displayName: device || deviceRecord.displayName, lastSeenAt: new Date() },
-    })
+    const seenAt = new Date()
+    await db
+      .update(devices)
+      .set({
+        displayName: device || deviceRecord.displayName,
+        lastSeenAt: seenAt,
+        updatedAt: seenAt,
+      })
+      .where(eq(devices.id, deviceRecord.id))
 
     return NextResponse.json(
       {
         success: true,
         data: redactGeneratedHashKeyForClient(entry as unknown as Record<string, unknown>),
       },
-      { status: 200 }
+      { status: 200 },
     )
   } catch (error) {
     console.error('添加活动失败:', error)

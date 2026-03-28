@@ -1,13 +1,15 @@
+import { count, eq } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getSession } from '@/lib/auth'
-import prisma from '@/lib/prisma'
+import { db } from '@/lib/db'
+import { adminUsers } from '@/lib/drizzle-schema'
 
 export const dynamic = 'force-dynamic'
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getSession()
   if (!session) {
@@ -26,17 +28,18 @@ export async function DELETE(
   }
 
   // 至少保留一个管理员
-  const count = await prisma.adminUser.count()
-  if (count <= 1) {
+  const [cntRow] = await db.select({ c: count() }).from(adminUsers)
+  const countVal = Number(cntRow?.c ?? 0)
+  if (countVal <= 1) {
     return NextResponse.json({ success: false, error: '至少需要保留一个管理员账户' }, { status: 400 })
   }
 
-  const user = await prisma.adminUser.findUnique({ where: { id: userId } })
+  const [user] = await db.select().from(adminUsers).where(eq(adminUsers.id, userId)).limit(1)
   if (!user) {
     return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 })
   }
 
-  await prisma.adminUser.delete({ where: { id: userId } })
+  await db.delete(adminUsers).where(eq(adminUsers.id, userId))
 
   return NextResponse.json({ success: true })
 }

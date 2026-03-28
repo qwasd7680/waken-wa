@@ -1,9 +1,11 @@
 import crypto from 'crypto'
+import { count, desc, eq } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { storedFormFromPlainSecret } from '@/lib/api-token-secret'
 import { getSession } from '@/lib/auth'
-import prisma from '@/lib/prisma'
+import { db } from '@/lib/db'
+import { apiTokens, devices } from '@/lib/drizzle-schema'
 
 async function requireAdmin() {
   const session = await getSession()
@@ -17,7 +19,7 @@ export async function GET(request: NextRequest) {
   if (!session) {
     return NextResponse.json({ success: false, error: '未授权' }, { status: 401 })
   }
-  
+
   try {
     const { searchParams } = new URL(request.url)
     const rawLimit = searchParams.get('limit')
@@ -44,28 +46,30 @@ export async function GET(request: NextRequest) {
       const limit = Math.min(Math.max(parseInt(rawLimit, 10) || 10, 1), 100)
       const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10) || 0, 0)
 
-      const [tokens, total] = await Promise.all([
-        prisma.apiToken.findMany({
-          orderBy: { createdAt: 'desc' },
-          take: limit,
-          skip: offset,
-        }),
-        prisma.apiToken.count(),
+      const [tokens, [totalRow]] = await Promise.all([
+        db
+          .select()
+          .from(apiTokens)
+          .orderBy(desc(apiTokens.createdAt))
+          .limit(limit)
+          .offset(offset),
+        db.select({ c: count() }).from(apiTokens),
       ])
+      const total = Number(totalRow?.c ?? 0)
 
       const recentByToken = await Promise.all(
-        tokens.map((t) =>
-          (prisma as any).device.findMany({
-            where: { apiTokenId: t.id },
-            orderBy: [{ lastSeenAt: 'desc' }, { updatedAt: 'desc' }],
-            take: recentLimit,
-            select: {
-              displayName: true,
-              generatedHashKey: true,
-              lastSeenAt: true,
-            },
-          })
-        )
+        tokens.map((t: { id: number }) =>
+          db
+            .select({
+              displayName: devices.displayName,
+              generatedHashKey: devices.generatedHashKey,
+              lastSeenAt: devices.lastSeenAt,
+            })
+            .from(devices)
+            .where(eq(devices.apiTokenId, t.id))
+            .orderBy(desc(devices.lastSeenAt), desc(devices.updatedAt))
+            .limit(recentLimit),
+        ),
       )
 
       const maskedTokens = maskWithRecent(tokens, recentByToken)
@@ -78,23 +82,21 @@ export async function GET(request: NextRequest) {
     }
 
     // Full list (no limit): used by device binding dropdown etc.
-    const tokens = await prisma.apiToken.findMany({
-      orderBy: { createdAt: 'desc' },
-    })
+    const tokens = await db.select().from(apiTokens).orderBy(desc(apiTokens.createdAt))
 
     const recentByToken = await Promise.all(
-      tokens.map((t) =>
-        (prisma as any).device.findMany({
-          where: { apiTokenId: t.id },
-          orderBy: [{ lastSeenAt: 'desc' }, { updatedAt: 'desc' }],
-          take: recentLimit,
-          select: {
-            displayName: true,
-            generatedHashKey: true,
-            lastSeenAt: true,
-          },
-        })
-      )
+      tokens.map((t: { id: number }) =>
+        db
+          .select({
+            displayName: devices.displayName,
+            generatedHashKey: devices.generatedHashKey,
+            lastSeenAt: devices.lastSeenAt,
+          })
+          .from(devices)
+          .where(eq(devices.apiTokenId, t.id))
+          .orderBy(desc(devices.lastSeenAt), desc(devices.updatedAt))
+          .limit(recentLimit),
+      ),
     )
 
     const maskedTokens = maskWithRecent(tokens, recentByToken)
@@ -112,20 +114,21 @@ export async function POST(request: NextRequest) {
   if (!session) {
     return NextResponse.json({ success: false, error: '未授权' }, { status: 401 })
   }
-  
+
   try {
     const { name } = await request.json()
-    
+
     if (!name) {
       return NextResponse.json({ success: false, error: '请输入名称' }, { status: 400 })
     }
-    
+
     const plainToken = crypto.randomBytes(32).toString('hex')
     const storedToken = storedFormFromPlainSecret(plainToken)
 
-    const result = await prisma.apiToken.create({
-      data: { name, token: storedToken, isActive: true },
-    })
+    const [result] = await db
+      .insert(apiTokens)
+      .values({ name, token: storedToken, isActive: true })
+      .returning()
 
     const requestUrl = new URL(request.url)
     const endpoint = `${requestUrl.protocol}//${requestUrl.host}/api/activity`
@@ -134,16 +137,16 @@ export async function POST(request: NextRequest) {
         version: 1,
         endpoint,
         apiKey: plainToken,
-        tokenName: result.name,
+        tokenName: result!.name,
       }),
-      'utf8'
+      'utf8',
     ).toString('base64')
 
     // Plain secret only in this response; DB holds h$ + sha256(plain).
     return NextResponse.json(
       {
         success: true,
-        data: { ...result, token: plainToken },
+        data: { ...result!, token: plainToken },
         tokenBundleBase64: tokenBundle,
         endpoint,
       },
@@ -161,22 +164,19 @@ export async function PATCH(request: NextRequest) {
   if (!session) {
     return NextResponse.json({ success: false, error: '未授权' }, { status: 401 })
   }
-  
+
   try {
     const { id, is_active } = await request.json()
-    
+
     if (typeof id !== 'number' || !Number.isFinite(id)) {
       return NextResponse.json({ success: false, error: '无效的 ID' }, { status: 400 })
     }
     if (typeof is_active !== 'boolean') {
       return NextResponse.json({ success: false, error: '无效的状态值' }, { status: 400 })
     }
-    
-    await prisma.apiToken.update({
-      where: { id },
-      data: { isActive: is_active }
-    })
-    
+
+    await db.update(apiTokens).set({ isActive: is_active }).where(eq(apiTokens.id, id))
+
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('更新 Token 失败:', error)
@@ -190,11 +190,11 @@ export async function DELETE(request: NextRequest) {
   if (!session) {
     return NextResponse.json({ success: false, error: '未授权' }, { status: 401 })
   }
-  
+
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
-    
+
     if (!id) {
       return NextResponse.json({ success: false, error: '缺少有效的 ID' }, { status: 400 })
     }
@@ -202,11 +202,9 @@ export async function DELETE(request: NextRequest) {
     if (isNaN(idNum)) {
       return NextResponse.json({ success: false, error: '无效的 ID' }, { status: 400 })
     }
-    
-    await prisma.apiToken.delete({
-      where: { id: idNum }
-    })
-    
+
+    await db.delete(apiTokens).where(eq(apiTokens.id, idNum))
+
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('删除 Token 失败:', error)

@@ -1,3 +1,4 @@
+import { count, desc, eq } from 'drizzle-orm'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 
@@ -11,12 +12,13 @@ import { SiteLockForm } from '@/components/site-lock-form'
 import { UserProfile, UserProfileNoteSection } from '@/components/user-profile'
 import { normalizeActivityUpdateMode } from '@/lib/activity-update-mode'
 import { verifySiteLockSession } from '@/lib/auth'
+import { db } from '@/lib/db'
+import { inspirationEntries, siteConfig } from '@/lib/drizzle-schema'
 import { getHCaptchaPublicConfig } from '@/lib/hcaptcha'
 import {
   normalizeHitokotoCategories,
   normalizeHitokotoEncode,
 } from '@/lib/hitokoto'
-import prisma from '@/lib/prisma'
 import {
   parseScheduleCoursesJson,
   resolveSchedulePeriodTemplate,
@@ -29,7 +31,7 @@ import { normalizeTimezone } from '@/lib/timezone'
 export const dynamic = 'force-dynamic'
 
 export default async function Home() {
-  const config = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } })
+  const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
   if (!config) {
     redirect('/admin/setup')
   }
@@ -58,21 +60,22 @@ export default async function Home() {
   // Config object for later use
   const cfg = config as Record<string, unknown>
 
-  const [inspirationRows, inspirationTotal] = await Promise.all([
-    (prisma as any).inspirationEntry.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 3,
-      select: {
-        id: true,
-        title: true,
-        content: true,
-        imageDataUrl: true,
-        statusSnapshot: true,
-        createdAt: true,
-      },
-    }),
-    (prisma as any).inspirationEntry.count(),
+  const [inspirationRows, [countRow]] = await Promise.all([
+    db
+      .select({
+        id: inspirationEntries.id,
+        title: inspirationEntries.title,
+        content: inspirationEntries.content,
+        imageDataUrl: inspirationEntries.imageDataUrl,
+        statusSnapshot: inspirationEntries.statusSnapshot,
+        createdAt: inspirationEntries.createdAt,
+      })
+      .from(inspirationEntries)
+      .orderBy(desc(inspirationEntries.createdAt))
+      .limit(3),
+    db.select({ c: count() }).from(inspirationEntries),
   ])
+  const inspirationTotal = Number(countRow?.c ?? 0)
   
   // Timezone for inspiration entries
   const displayTimezoneForEntries = normalizeTimezone(cfg.displayTimezone)

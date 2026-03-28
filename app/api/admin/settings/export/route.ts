@@ -1,11 +1,13 @@
+import { desc, eq } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 
 import { getSession } from '@/lib/auth'
+import { db } from '@/lib/db'
+import { apiTokens, siteConfig } from '@/lib/drizzle-schema'
 import {
   normalizeHitokotoCategories,
   normalizeHitokotoEncode,
 } from '@/lib/hitokoto'
-import prisma from '@/lib/prisma'
 import {
   backfillCoursePeriodIdsFromTemplate,
   resolveSchedulePeriodTemplate,
@@ -31,32 +33,33 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [siteConfig, tokens] = await Promise.all([
-      (prisma as any).siteConfig.findUnique({ where: { id: 1 } }),
-      prisma.apiToken.findMany({
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          name: true,
-          token: true,
-          isActive: true,
-          createdAt: true,
-          lastUsedAt: true,
-        },
-      }),
+    const [cfgRows, tokens] = await Promise.all([
+      db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1),
+      db
+        .select({
+          id: apiTokens.id,
+          name: apiTokens.name,
+          token: apiTokens.token,
+          isActive: apiTokens.isActive,
+          createdAt: apiTokens.createdAt,
+          lastUsedAt: apiTokens.lastUsedAt,
+        })
+        .from(apiTokens)
+        .orderBy(desc(apiTokens.createdAt)),
     ])
+    const cfg = cfgRows[0]
 
-    if (!siteConfig) {
+    if (!cfg) {
       return NextResponse.json(
         { success: false, error: '未找到网页配置，请先完成初始化配置' },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
     const baseUrl = getBaseUrl(request)
-    const schedulePeriodTemplate = resolveSchedulePeriodTemplate(siteConfig.schedulePeriodTemplate)
-    const scheduleCoursesRaw = Array.isArray(siteConfig.scheduleCourses)
-      ? siteConfig.scheduleCourses
+    const schedulePeriodTemplate = resolveSchedulePeriodTemplate(cfg.schedulePeriodTemplate)
+    const scheduleCoursesRaw = Array.isArray(cfg.scheduleCourses)
+      ? cfg.scheduleCourses
       : []
     const scheduleCourses = backfillCoursePeriodIdsFromTemplate(
       scheduleCoursesRaw,
@@ -67,56 +70,56 @@ export async function GET(request: Request) {
       version: 1,
       exportedAt: new Date().toISOString(),
       web: {
-        pageTitle: siteConfig.pageTitle,
-        userName: siteConfig.userName,
-        userBio: siteConfig.userBio,
-        avatarUrl: siteConfig.avatarUrl,
-        userNote: siteConfig.userNote,
-        userNoteHitokotoEnabled: Boolean(siteConfig.userNoteHitokotoEnabled),
+        pageTitle: cfg.pageTitle,
+        userName: cfg.userName,
+        userBio: cfg.userBio,
+        avatarUrl: cfg.avatarUrl,
+        userNote: cfg.userNote,
+        userNoteHitokotoEnabled: Boolean(cfg.userNoteHitokotoEnabled),
         userNoteHitokotoCategories: normalizeHitokotoCategories(
-          siteConfig.userNoteHitokotoCategories,
+          cfg.userNoteHitokotoCategories,
         ),
-        userNoteHitokotoEncode: normalizeHitokotoEncode(siteConfig.userNoteHitokotoEncode),
-        themePreset: siteConfig.themePreset,
-        themeCustomSurface: siteConfig.themeCustomSurface,
-        customCss: siteConfig.customCss,
-        historyWindowMinutes: siteConfig.historyWindowMinutes,
-        processStaleSeconds: siteConfig.processStaleSeconds ?? 500,
-        appMessageRules: siteConfig.appMessageRules,
-        appMessageRulesShowProcessName: siteConfig.appMessageRulesShowProcessName !== false,
-        appBlacklist: siteConfig.appBlacklist,
-        appWhitelist: siteConfig.appWhitelist,
-        appFilterMode: siteConfig.appFilterMode,
-        appNameOnlyList: siteConfig.appNameOnlyList,
-        pageLockEnabled: siteConfig.pageLockEnabled,
-        currentlyText: siteConfig.currentlyText,
-        earlierText: siteConfig.earlierText,
-        adminText: siteConfig.adminText,
-        autoAcceptNewDevices: Boolean(siteConfig.autoAcceptNewDevices),
+        userNoteHitokotoEncode: normalizeHitokotoEncode(cfg.userNoteHitokotoEncode),
+        themePreset: cfg.themePreset,
+        themeCustomSurface: cfg.themeCustomSurface,
+        customCss: cfg.customCss,
+        historyWindowMinutes: cfg.historyWindowMinutes,
+        processStaleSeconds: cfg.processStaleSeconds ?? 500,
+        appMessageRules: cfg.appMessageRules,
+        appMessageRulesShowProcessName: cfg.appMessageRulesShowProcessName !== false,
+        appBlacklist: cfg.appBlacklist,
+        appWhitelist: cfg.appWhitelist,
+        appFilterMode: cfg.appFilterMode,
+        appNameOnlyList: cfg.appNameOnlyList,
+        pageLockEnabled: cfg.pageLockEnabled,
+        currentlyText: cfg.currentlyText,
+        earlierText: cfg.earlierText,
+        adminText: cfg.adminText,
+        autoAcceptNewDevices: Boolean(cfg.autoAcceptNewDevices),
         inspirationAllowedDeviceHashes:
-          siteConfig.inspirationAllowedDeviceHashes === null ||
-          siteConfig.inspirationAllowedDeviceHashes === undefined
+          cfg.inspirationAllowedDeviceHashes === null ||
+          cfg.inspirationAllowedDeviceHashes === undefined
             ? null
-            : siteConfig.inspirationAllowedDeviceHashes,
-        scheduleSlotMinutes: siteConfig.scheduleSlotMinutes ?? 30,
+            : cfg.inspirationAllowedDeviceHashes,
+        scheduleSlotMinutes: cfg.scheduleSlotMinutes ?? 30,
         schedulePeriodTemplate,
         scheduleGridByWeekday: resolveScheduleGridByWeekday(
-          siteConfig.scheduleGridByWeekday,
-          siteConfig.scheduleSlotMinutes ?? 30,
+          cfg.scheduleGridByWeekday,
+          cfg.scheduleSlotMinutes ?? 30,
         ),
         scheduleCourses,
-        scheduleIcs: siteConfig.scheduleIcs ?? null,
-        scheduleInClassOnHome: Boolean(siteConfig.scheduleInClassOnHome),
-        scheduleHomeShowLocation: Boolean(siteConfig.scheduleHomeShowLocation),
-        scheduleHomeShowTeacher: Boolean(siteConfig.scheduleHomeShowTeacher),
-        scheduleHomeShowNextUpcoming: Boolean(siteConfig.scheduleHomeShowNextUpcoming),
+        scheduleIcs: cfg.scheduleIcs ?? null,
+        scheduleInClassOnHome: Boolean(cfg.scheduleInClassOnHome),
+        scheduleHomeShowLocation: Boolean(cfg.scheduleHomeShowLocation),
+        scheduleHomeShowTeacher: Boolean(cfg.scheduleHomeShowTeacher),
+        scheduleHomeShowNextUpcoming: Boolean(cfg.scheduleHomeShowNextUpcoming),
         scheduleHomeAfterClassesLabel:
-          typeof siteConfig.scheduleHomeAfterClassesLabel === 'string' &&
-          siteConfig.scheduleHomeAfterClassesLabel.trim().length > 0
-            ? siteConfig.scheduleHomeAfterClassesLabel.trim().slice(0, 40)
+          typeof cfg.scheduleHomeAfterClassesLabel === 'string' &&
+          cfg.scheduleHomeAfterClassesLabel.trim().length > 0
+            ? cfg.scheduleHomeAfterClassesLabel.trim().slice(0, 40)
             : '正在摸鱼',
-        globalMouseTiltEnabled: siteConfig.globalMouseTiltEnabled === true,
-        hideActivityMedia: siteConfig.hideActivityMedia === true,
+        globalMouseTiltEnabled: cfg.globalMouseTiltEnabled === true,
+        hideActivityMedia: cfg.hideActivityMedia === true,
       },
       token: {
         reportEndpoint: `${baseUrl}/api/activity`,
