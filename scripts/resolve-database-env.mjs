@@ -43,10 +43,8 @@ export function isPostgresUrl(s) {
 
 /** App / build / push: pooled URL first. */
 export function pickPostgresUrl() {
-  const pooled = process.env.POSTGRES_PRISMA_URL?.trim()
   const a = process.env.DATABASE_URL?.trim()
   const b = process.env.POSTGRES_URL?.trim()
-  if (isPostgresUrl(pooled)) return pooled
   if (isPostgresUrl(a)) return a
   if (isPostgresUrl(b)) return b
   return null
@@ -55,11 +53,9 @@ export function pickPostgresUrl() {
 /** `pnpm db:init` / postinstall: prefer direct (non-pooling) for migrations push. */
 export function pickPostgresUrlForInitDb() {
   const np = process.env.POSTGRES_URL_NON_POOLING?.trim()
-  const pooled = process.env.POSTGRES_PRISMA_URL?.trim()
   const a = process.env.DATABASE_URL?.trim()
   const b = process.env.POSTGRES_URL?.trim()
   if (isPostgresUrl(np)) return np
-  if (isPostgresUrl(pooled)) return pooled
   if (isPostgresUrl(a)) return a
   if (isPostgresUrl(b)) return b
   return null
@@ -96,16 +92,16 @@ export function resolveDatabaseEnv(options = {}) {
 
   if (provider === 'sqlite') {
     if (!process.env.DATABASE_URL?.trim()) {
-      process.env.DATABASE_URL = 'file:./prisma/dev.db'
-      console.log('[db-env] DATABASE_URL unset; using default file:./prisma/dev.db')
+      process.env.DATABASE_URL = 'file:./drizzle/dev.db'
+      console.log('[db-env] DATABASE_URL unset; using default file:./drizzle/dev.db')
     }
   } else {
     const pgUrl = pick()
     if (!pgUrl) {
       throw new Error(
         forInitDb
-          ? 'PostgreSQL: set POSTGRES_URL_NON_POOLING, POSTGRES_PRISMA_URL, DATABASE_URL, or POSTGRES_URL (postgres:// or postgresql://...)'
-          : 'PostgreSQL: set POSTGRES_PRISMA_URL, DATABASE_URL, or POSTGRES_URL (postgres:// or postgresql://...)',
+          ? 'PostgreSQL: set POSTGRES_URL_NON_POOLING, DATABASE_URL, or POSTGRES_URL (postgres:// or postgresql://...)'
+          : 'PostgreSQL: set DATABASE_URL, or POSTGRES_URL (postgres:// or postgresql://...)',
       )
     }
     process.env.DATABASE_URL = pgUrl

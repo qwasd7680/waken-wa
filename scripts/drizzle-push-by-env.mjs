@@ -3,6 +3,7 @@
  */
 import { execSync } from 'node:child_process'
 
+import { rebuildBetterSqlite3 } from './ensure-better-sqlite3.mjs'
 import { repoRoot, resolveDatabaseEnv } from './resolve-database-env.mjs'
 
 const forcePostgres = process.argv.includes('--postgres')
@@ -12,6 +13,9 @@ try {
     forceProvider: forcePostgres ? 'postgresql' : undefined,
   })
   console.log(`[drizzle-push] provider=${provider} config=${drizzleConfig}`)
+  if (provider === 'sqlite') {
+    rebuildBetterSqlite3()
+  }
   execSync(`pnpm exec drizzle-kit push --config ${drizzleConfig}`, {
     stdio: 'inherit',
     cwd: repoRoot,

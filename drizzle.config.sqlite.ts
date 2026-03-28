@@ -5,6 +5,6 @@ export default defineConfig({
   out: './drizzle/migrations/sqlite',
   dialect: 'sqlite',
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? 'file:./prisma/dev.db',
+    url: process.env.DATABASE_URL ?? 'file:./drizzle/dev.db',
   },
 })

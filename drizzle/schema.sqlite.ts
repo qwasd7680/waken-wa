@@ -7,7 +7,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 
-/** Prisma SQLite stores DateTime as TEXT (ISO-8601); runtime uses Drizzle timestamp mode (driver typing lags in 0.44). */
+/** Drizzle SQLite stores DateTime as TEXT (ISO-8601); runtime uses Drizzle timestamp mode (driver typing lags in 0.44). */
 const textCol = text as any
 const ts = (name: string) =>
   textCol(name, { mode: 'timestamp' })

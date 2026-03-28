@@ -7,13 +7,11 @@ export function isPostgresConnectionUrl(value: string | undefined): boolean {
 
 /**
  * First standard postgres URL among env vars.
- * Priority: POSTGRES_PRISMA_URL, then DATABASE_URL, then POSTGRES_URL.
+ * Priority: DATABASE_URL, then POSTGRES_URL.
  */
 export function pickPostgresUrlFromEnv(): string | null {
-  const prisma = process.env.POSTGRES_PRISMA_URL?.trim()
   const a = process.env.DATABASE_URL?.trim()
   const b = process.env.POSTGRES_URL?.trim()
-  if (isPostgresConnectionUrl(prisma)) return prisma!
   if (isPostgresConnectionUrl(a)) return a!
   if (isPostgresConnectionUrl(b)) return b!
   return null
@@ -21,7 +19,7 @@ export function pickPostgresUrlFromEnv(): string | null {
 
 /**
  * When deploying with PostgreSQL env aliases, ensure DATABASE_URL is a postgres URL
- * (copy from POSTGRES_PRISMA_URL / POSTGRES_URL / etc. if needed).
+ * (copy from POSTGRES_URL / etc. if needed).
  */
 export function applyDatabaseUrlAliases(): void {
   const picked = pickPostgresUrlFromEnv()

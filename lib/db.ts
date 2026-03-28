@@ -40,7 +40,7 @@ function createDb(): AppDb {
     return drizzlePg(pool, { schema: pgSchema })
   }
   const sqliteUrl =
-    raw && !isPostgresConnectionUrl(raw) ? raw : 'file:./prisma/dev.db'
+    raw && !isPostgresConnectionUrl(raw) ? raw : 'file:./drizzle/dev.db'
   const path = sqliteFilePath(sqliteUrl)
   const client =
     globalThis.__wakenDrizzleSqlite ?? new Database(path)

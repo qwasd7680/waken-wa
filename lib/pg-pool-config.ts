@@ -1,7 +1,7 @@
 import type { PoolConfig } from 'pg'
 
 /**
- * Builds pg Pool options for PrismaPg. TLS defaults follow the driver (strict verification).
+ * Builds pg Pool options for DrizzlePg. TLS defaults follow the driver (strict verification).
  * Set POSTGRES_SSL_REJECT_UNAUTHORIZED=false only when the server uses a self-signed or
  * non-public CA and you accept MITM risk (e.g. some internal DBs / dev proxies).
  */
