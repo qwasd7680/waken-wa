@@ -22,6 +22,11 @@ fi
 
 export DATABASE_URL="${DATABASE_URL:-file:/app/data/dev.db}"
 
+run() {
+  npx prisma db push --schema prisma/schema.prisma
+  exec node server.js
+}
+
 if [ "$(id -u)" = 0 ]; then
   exec runuser -u nextjs -- env \
     DATABASE_URL="$DATABASE_URL" \
@@ -31,5 +36,5 @@ if [ "$(id -u)" = 0 ]; then
     NODE_ENV="${NODE_ENV:-production}" \
     sh -ec 'cd /app && npx prisma db push --schema prisma/schema.prisma && exec node server.js'
 else
-  exec sh -ec 'cd /app && npx prisma db push --schema prisma/schema.prisma && exec node server.js'
+  run
 fi
