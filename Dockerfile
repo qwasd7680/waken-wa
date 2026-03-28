@@ -66,5 +66,8 @@ RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
 
 EXPOSE 3000
 ENV PORT=3000
+# Next standalone reads HOSTNAME; HOST is set for common tooling conventions.
+ENV HOST=0.0.0.0
+ENV HOSTNAME=0.0.0.0
 
 ENTRYPOINT ["/docker-entrypoint.sh"]

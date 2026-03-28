@@ -2,6 +2,9 @@
 set -e
 cd /app
 
+export HOST=0.0.0.0
+export HOSTNAME=0.0.0.0
+
 mkdir -p /app/data
 
 # Persist JWT when unset: stable across restarts with the same named volume.
@@ -47,6 +50,8 @@ if [ "$(id -u)" = 0 ]; then
     JWT_SECRET="$JWT_SECRET" \
     PORT="${PORT:-3000}" \
     NODE_ENV="${NODE_ENV:-production}" \
+    HOST=0.0.0.0 \
+    HOSTNAME=0.0.0.0 \
     NODE_PATH=/app/tools/node_modules \
     HOME=/tmp \
     sh -ec "cd /app && node $DRIZZLE_KIT_CLI push --config $DRIZZLE_CONFIG && exec node server.js"
