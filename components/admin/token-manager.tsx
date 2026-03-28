@@ -3,6 +3,7 @@
 import { format } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { Check, Copy, Plus, QrCode, Trash2 } from 'lucide-react'
+import Image from 'next/image'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
@@ -470,9 +471,11 @@ export function TokenManager() {
             )}
             <div className="rounded-lg border p-4 flex items-center justify-center min-h-[280px]">
               {qrEncoded ? (
-                <img
+                <Image
                   src={getQrImageUrl(qrEncoded)}
                   alt="token qrcode"
+                  width={260}
+                  height={260}
                   className="h-[260px] w-[260px]"
                 />
               ) : (

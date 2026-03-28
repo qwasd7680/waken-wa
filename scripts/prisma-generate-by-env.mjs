@@ -1,6 +1,5 @@
 /**
  * Runs `prisma generate` with the schema chosen from env (same rules as init-db / postinstall).
- * Used by `pnpm build` on Vercel so Client matches DATABASE_URL (Postgres vs SQLite).
  */
 import { execSync } from 'node:child_process'
 

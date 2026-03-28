@@ -1,6 +1,7 @@
 'use client'
 
 import { ChevronRight } from 'lucide-react'
+import Image from 'next/image'
 import Link from 'next/link'
 
 import { MarkdownContent } from '@/components/admin/markdown-content'
@@ -114,10 +115,12 @@ export function InspirationHomeSection({
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                       )}
                     >
-                      <img
+                      <Image
                         src={entry.imageDataUrl}
                         alt=""
-                        className="h-full w-full object-cover object-center transition-transform duration-200 group-hover:scale-[1.04]"
+                        fill
+                        className="object-cover object-center transition-transform duration-200 group-hover:scale-[1.04]"
+                        sizes="(max-width: 640px) 64px, 75px"
                       />
                     </Link>
                     <EntryBody

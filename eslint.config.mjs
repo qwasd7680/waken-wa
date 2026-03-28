@@ -33,9 +33,6 @@ export default defineConfig([
           ],
         },
       ],
-      // React 19 compiler rules: warn until refactors (mounted portals, skeleton random width, etc.).
-      'react-hooks/purity': 'warn',
-      'react-hooks/set-state-in-effect': 'warn',
     },
   },
   globalIgnores([

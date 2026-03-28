@@ -3,6 +3,7 @@
 import { format } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { AppWindow, Battery, Clock, Gamepad2, Laptop, Music, Smartphone, Tablet } from 'lucide-react'
+import Image from 'next/image'
 import {
   type CSSProperties,
   useCallback,
@@ -14,6 +15,7 @@ import {
 
 import { useSharedActivityFeed } from '@/components/activity-feed-provider'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
+import { useIsClient } from '@/hooks/use-is-client'
 import { getMediaDisplay, type MediaDisplay } from '@/lib/activity-media'
 import { cn } from '@/lib/utils'
 
@@ -181,8 +183,7 @@ function MediaAndSteamRow({
               >
                 <Gamepad2 className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                 {!steamImgFailed ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- remote Steam CDN header art
-                  <img
+                  <Image
                     src={steam.imageUrl}
                     alt=""
                     width={40}
@@ -196,8 +197,7 @@ function MediaAndSteamRow({
             </HoverCardTrigger>
             <HoverCardContent className="w-72 space-y-3" align="start">
               {!steamImgFailed ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <Image
                   src={steam.imageUrl}
                   alt=""
                   width={460}
@@ -224,11 +224,7 @@ interface CurrentStatusProps {
 
 export function CurrentStatus({ hideActivityMedia = false }: CurrentStatusProps) {
   const { feed, error } = useSharedActivityFeed()
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useIsClient()
 
   if (!mounted) return null
 

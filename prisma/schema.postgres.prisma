@@ -1,4 +1,3 @@
-// PostgreSQL schema (Vercel / Supabase / self-hosted Postgres).
 // Use: prisma generate --schema prisma/schema.postgres.prisma
 // Env: standard postgres URL in DATABASE_URL or POSTGRES_URL (see lib/db-env.ts).
 

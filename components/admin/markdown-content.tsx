@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useMemo } from 'react'
 import type { Components } from 'react-markdown'
 import ReactMarkdown from 'react-markdown'
@@ -69,9 +70,16 @@ const baseMarkdownComponents: Omit<Components, 'img'> = {
 function buildComponents(imageClassName: string): Components {
   return {
     ...baseMarkdownComponents,
-    img: ({ src, alt }) => (
-      <img src={src} alt={alt || ''} className={imageClassName} />
-    ),
+    img: ({ src, alt }) =>
+      typeof src === 'string' && src ? (
+        <Image
+          src={src}
+          alt={alt || ''}
+          width={800}
+          height={600}
+          className={imageClassName}
+        />
+      ) : null,
   }
 }
 

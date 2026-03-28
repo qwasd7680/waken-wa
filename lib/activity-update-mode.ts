@@ -30,7 +30,6 @@ export function normalizeActivityUpdateMode(value: unknown): ActivityUpdateMode 
     if (lower === 'sse' || lower === 'polling') {
       return lower
     }
-    // Legacy values (Supabase Realtime / WebSocket era)
     if (lower === 'realtime' || lower === 'websocket') {
       return 'sse'
     }

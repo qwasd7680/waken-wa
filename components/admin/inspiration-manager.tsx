@@ -3,6 +3,7 @@
 import { format } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { ImagePlus, Loader2, Trash2 } from 'lucide-react'
+import Image from 'next/image'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ImageCropDialog } from '@/components/admin/image-crop-dialog'
@@ -269,9 +270,11 @@ export function InspirationManager() {
             {imageDataUrl.trim() ? (
               <div className="rounded-lg border bg-muted/30 p-3">
                 <p className="text-xs text-muted-foreground mb-2">图片预览</p>
-                <img
+                <Image
                   src={imageDataUrl.trim()}
                   alt="inspiration preview"
+                  width={800}
+                  height={600}
                   className="max-h-56 w-auto rounded-md border bg-background"
                 />
                 <Button
@@ -490,9 +493,11 @@ curl -X POST /api/inspiration/entries \\
 
                   {entry.imageDataUrl ? (
                     <div className="rounded-lg border bg-muted/30 p-3">
-                      <img
+                      <Image
                         src={entry.imageDataUrl}
                         alt="inspiration"
+                        width={800}
+                        height={600}
                         className="max-h-64 w-auto rounded-md border bg-background"
                       />
                     </div>

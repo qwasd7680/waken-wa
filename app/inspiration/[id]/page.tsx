@@ -1,5 +1,6 @@
 import { format } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
+import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
@@ -57,9 +58,11 @@ export default async function InspirationDetailPage({
 
           {row.imageDataUrl ? (
             <div className="mb-6 rounded-md overflow-hidden border border-border bg-muted/30">
-              <img
+              <Image
                 src={row.imageDataUrl}
                 alt=""
+                width={1200}
+                height={900}
                 className="w-full max-h-[min(70vh,28rem)] object-cover object-center"
               />
             </div>

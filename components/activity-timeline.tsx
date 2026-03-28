@@ -3,9 +3,10 @@
 import { format } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { Laptop, Music, Smartphone, Tablet } from 'lucide-react'
-import { useEffect, useState } from 'react'
 
 import { useActivityFeed } from '@/hooks/use-activity-feed'
+import { useIsClient } from '@/hooks/use-is-client'
+import { useTickingMs } from '@/hooks/use-ticking-ms'
 import { getMediaDisplay } from '@/lib/activity-media'
 import type { ActivityUpdateMode } from '@/lib/activity-update-mode'
 
@@ -36,11 +37,8 @@ export function ActivityTimeline({
   activityUpdateMode?: ActivityUpdateMode
 }) {
   const { feed, error } = useActivityFeed({ mode: activityUpdateMode })
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useIsClient()
+  const liveMs = useTickingMs(30_000)
 
   if (!mounted) return null
 
@@ -72,18 +70,15 @@ export function ActivityTimeline({
             (activity.deviceId != null ? `device #${activity.deviceId}` : `activity #${activity.id}`)
           const deviceType = getDeviceType(deviceName, activity.metadata)
           const media = hideActivityMedia ? null : getMediaDisplay(activity.metadata)
-          const duration = activity.endedAt
-            ? Math.round(
-                (new Date(activity.endedAt).getTime() -
-                  new Date(activity.startedAt).getTime()) /
-                  1000 /
-                  60
-              )
-            : Math.round(
-                (Date.now() - new Date(activity.startedAt).getTime()) /
-                  1000 /
-                  60
-              )
+          const startedMs = new Date(activity.startedAt).getTime()
+          const duration =
+            activity.endedAt != null
+              ? Math.round(
+                  (new Date(activity.endedAt).getTime() - startedMs) / 1000 / 60
+                )
+              : liveMs == null
+                ? 0
+                : Math.round((liveMs - startedMs) / 1000 / 60)
 
           return (
             <div

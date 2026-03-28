@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-
-import { DEFAULT_TIMEZONE,formatDateTimeShort } from '@/lib/timezone'
+import { useIsClient } from '@/hooks/use-is-client'
+import { DEFAULT_TIMEZONE, formatDateTimeShort } from '@/lib/timezone'
 
 interface FormattedTimeProps {
   /** ISO 日期字符串或 Date 对象 */
@@ -18,17 +17,11 @@ interface FormattedTimeProps {
  * 使用配置的时区显示时间，避免服务端/客户端水合错误
  */
 export function FormattedTime({ date, timezone, className }: FormattedTimeProps) {
-  const [mounted, setMounted] = useState(false)
-  
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useIsClient()
 
   const tz = timezone || DEFAULT_TIMEZONE
   const isoDate = typeof date === 'string' ? date : date.toISOString()
-  
-  // 服务端渲染时显示占位符，避免水合错误
-  // 两个分支都需要 suppressHydrationWarning 以确保 React 不会报错
+
   if (!mounted) {
     return <time className={className} dateTime={isoDate} suppressHydrationWarning>--</time>
   }

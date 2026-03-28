@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
@@ -259,9 +260,11 @@ export function SetupForm({ needAdminSetup, initialConfig }: SetupFormProps) {
               </p>
               {avatarUrl && (
                 <div className="flex items-center gap-3 rounded-md border border-border/60 bg-background/60 p-3">
-                  <img
+                  <Image
                     src={avatarUrl}
                     alt="avatar preview"
+                    width={40}
+                    height={40}
                     className="w-10 h-10 rounded-full border border-border object-cover"
                   />
                   <span className="text-xs text-muted-foreground">头像预览（当前将保存到数据库）</span>

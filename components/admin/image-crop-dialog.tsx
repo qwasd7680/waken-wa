@@ -415,6 +415,7 @@ export function ImageCropDialog({
               onPointerUp={() => setDragStart(null)}
               onPointerCancel={() => setDragStart(null)}
             >
+              {/* eslint-disable-next-line @next/next/no-img-element -- crop math needs HTMLImageElement + naturalWidth */}
               <img
                 ref={cropImageRef}
                 src={sourceUrl}

@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
 
 import { useSharedActivityFeed } from '@/components/activity-feed-provider'
@@ -158,13 +159,13 @@ export function UserProfile({
               isOnline ? 'border-online/60' : 'border-destructive/50'
             }`}
           >
-            <img
+            <Image
               src={avatarUrl}
               alt={name}
               width={72}
               height={72}
               className="w-full h-full object-cover"
-              loading="eager"
+              priority
             />
           </div>
           <div
