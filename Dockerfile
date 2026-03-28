@@ -1,4 +1,4 @@
-# Production image: Next.js standalone + Prisma (PostgreSQL) for Docker Compose.
+# Production image: Next.js standalone + Prisma (SQLite in /app/data via Compose).
 FROM node:22-bookworm-slim AS base
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
@@ -12,8 +12,8 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 
 FROM deps AS builder
 COPY . .
-# Build-time URL only (Prisma generate does not connect). Must be postgres:// so the Postgres schema is used.
-ENV DATABASE_URL=postgresql://waken:build@127.0.0.1:5432/waken
+# Build-time URL only (Prisma generate does not connect). Use SQLite to match prisma/schema.prisma.
+ENV DATABASE_URL=file:./prisma/build.db
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN mkdir -p public
 RUN pnpm run build
@@ -39,7 +39,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modul
 
 COPY --chmod=755 docker-entrypoint.sh /docker-entrypoint.sh
 
-USER nextjs
+RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
+
+USER root
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0

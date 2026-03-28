@@ -21,6 +21,28 @@ compose() {
   fi
 }
 
+# Fill empty JWT_SECRET in .env so compose passes a stable secret (optional; container also persists .jwt_secret).
+ensure_jwt_in_env_file() {
+  [ -f .env ] || return
+  local line val
+  line=$(grep '^JWT_SECRET=' .env 2>/dev/null | tail -n1 || true)
+  val="${line#JWT_SECRET=}"
+  val="${val%\"}"
+  val="${val#\"}"
+  val="${val%\'}"
+  val="${val#\'}"
+  [ -n "$val" ] && return
+  command -v openssl >/dev/null 2>&1 || return
+  local secret
+  secret=$(openssl rand -hex 32)
+  if grep -q '^JWT_SECRET=' .env 2>/dev/null; then
+    grep -v '^JWT_SECRET=' .env >.env.tmp && echo "JWT_SECRET=$secret" >>.env.tmp && mv .env.tmp .env
+  else
+    echo "JWT_SECRET=$secret" >>.env
+  fi
+  echo "Generated JWT_SECRET in .env (optional; Docker can also persist JWT in the sqlite volume)."
+}
+
 resolve_project_root() {
   if [ -n "${WAKEN_DEPLOY_DIR:-}" ]; then
     if [ ! -f "$WAKEN_DEPLOY_DIR/docker-compose.yml" ]; then
@@ -73,21 +95,18 @@ if [ ! -f .env ]; then
     cp .env.example .env
     echo "Created .env from .env.example."
   else
-    echo "error: missing .env and .env.example. Create .env with at least:" >&2
-    echo "  POSTGRES_PASSWORD=..." >&2
-    echo "  JWT_SECRET=..." >&2
-    echo "  NEXT_PUBLIC_BASE_URL=https://your-host:3000" >&2
-    exit 1
+    {
+      echo 'JWT_SECRET='
+      echo 'DATABASE_URL=file:./prisma/dev.db'
+      echo 'NEXT_PUBLIC_BASE_URL=http://localhost:3000'
+    } >.env
+    echo "Created minimal .env (no .env.example in repo)."
   fi
-  echo ""
-  echo "Edit .env: set POSTGRES_PASSWORD and JWT_SECRET (and NEXT_PUBLIC_BASE_URL for production)."
-  echo "Then run again:"
-  echo "  cd \"$ROOT\" && ./deploy.sh"
-  echo "Or: curl ... | bash   (from any directory)"
-  exit 1
 fi
 
-echo "Building and starting stack (postgres + app)..."
+ensure_jwt_in_env_file
+
+echo "Building and starting app (SQLite in Docker volume waken_sqlite_data)..."
 compose up -d --build
 
 echo ""
