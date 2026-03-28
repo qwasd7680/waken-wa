@@ -12,6 +12,8 @@ export const ACTIVITY_UPDATE_MODE_OPTIONS: {
   value: ActivityUpdateMode
   label: string
   description: string
+  /** Optional caution shown below the option (e.g. hosting limits). */
+  warning?: string
 }[] = [
   {
     value: 'sse',
