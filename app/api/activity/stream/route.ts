@@ -8,7 +8,8 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 const MAX_CONCURRENT_STREAMS = 50
-const MAX_STREAM_DURATION_MS = 500 * 1000 // 500s
+/** Max time without a successful push; resets on each push (sliding lease). */
+const MAX_STREAM_IDLE_MS = 600 * 1000 // 10mins
 const POLL_INTERVAL_MS = 15 * 1000 // 15 秒轮询间隔
 
 let activeStreams = 0
@@ -33,12 +34,12 @@ export async function GET() {
 
   const encoder = new TextEncoder()
   let timer: ReturnType<typeof setInterval> | null = null
-  let autoCloseTimer: ReturnType<typeof setTimeout> | null = null
+  let idleCloseTimer: ReturnType<typeof setTimeout> | null = null
   let closed = false
 
   const cleanup = () => {
     if (timer) { clearInterval(timer); timer = null }
-    if (autoCloseTimer) { clearTimeout(autoCloseTimer); autoCloseTimer = null }
+    if (idleCloseTimer) { clearTimeout(idleCloseTimer); idleCloseTimer = null }
     if (!closed) {
       closed = true
       activeStreams = Math.max(0, activeStreams - 1)
@@ -47,6 +48,15 @@ export async function GET() {
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
+      const bumpIdleLease = () => {
+        if (closed) return
+        if (idleCloseTimer) clearTimeout(idleCloseTimer)
+        idleCloseTimer = setTimeout(() => {
+          cleanup()
+          try { controller.close() } catch { /* already closed */ }
+        }, MAX_STREAM_IDLE_MS)
+      }
+
       const safeEnqueue = (chunk: Uint8Array): boolean => {
         if (closed) return false
         try {
@@ -62,34 +72,34 @@ export async function GET() {
         if (closed) return
         try {
           const payload = await getActivityFeedData(50)
-          safeEnqueue(
+          if (safeEnqueue(
             encoder.encode(
               toSseEvent('activity', { success: true, data: payload })
             )
-          )
+          )) {
+            bumpIdleLease()
+          }
         } catch (error) {
           if (closed) return
           console.error('[activity stream] push failed:', error)
-          safeEnqueue(
+          if (safeEnqueue(
             encoder.encode(
               toSseEvent('error', {
                 success: false,
                 error: 'stream update failed',
               })
             )
-          )
+          )) {
+            bumpIdleLease()
+          }
         }
       }
 
+      bumpIdleLease()
       void push()
       timer = setInterval(() => {
         void push()
       }, POLL_INTERVAL_MS)
-
-      autoCloseTimer = setTimeout(() => {
-        cleanup()
-        try { controller.close() } catch { /* already closed */ }
-      }, MAX_STREAM_DURATION_MS)
     },
     cancel() {
       cleanup()
