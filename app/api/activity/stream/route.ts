@@ -11,6 +11,8 @@ const MAX_CONCURRENT_STREAMS = 50
 /** Max time without a successful push; resets on each push (sliding lease). */
 const MAX_STREAM_IDLE_MS = 600 * 1000 // 10mins
 const POLL_INTERVAL_MS = 15 * 1000 // 15 秒轮询间隔
+/** Close stream after this many consecutive failed activity fetches (link treated as dead). */
+const MAX_CONSECUTIVE_PUSH_FAILURES = 3
 
 let activeStreams = 0
 
@@ -36,6 +38,7 @@ export async function GET() {
   let timer: ReturnType<typeof setInterval> | null = null
   let idleCloseTimer: ReturnType<typeof setTimeout> | null = null
   let closed = false
+  let consecutivePushFailures = 0
 
   const cleanup = () => {
     if (timer) { clearInterval(timer); timer = null }
@@ -77,11 +80,22 @@ export async function GET() {
               toSseEvent('activity', { success: true, data: payload })
             )
           )) {
+            consecutivePushFailures = 0
             bumpIdleLease()
           }
         } catch (error) {
           if (closed) return
           console.error('[activity stream] push failed:', error)
+          consecutivePushFailures++
+          if (consecutivePushFailures >= MAX_CONSECUTIVE_PUSH_FAILURES) {
+            cleanup()
+            try {
+              controller.close()
+            } catch {
+              /* already closed */
+            }
+            return
+          }
           if (safeEnqueue(
             encoder.encode(
               toSseEvent('error', {
