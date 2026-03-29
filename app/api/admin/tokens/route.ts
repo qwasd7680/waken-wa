@@ -8,10 +8,10 @@ import {
   ADMIN_LIST_MAX_PAGE_SIZE,
 } from '@/lib/admin-list-constants'
 import { storedFormFromPlainSecret } from '@/lib/api-token-secret'
-import { getPublicOrigin } from '@/lib/public-request-url'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { apiTokens, devices } from '@/lib/drizzle-schema'
+import { getPublicOrigin } from '@/lib/public-request-url'
 
 async function requireAdmin() {
   const session = await getSession()

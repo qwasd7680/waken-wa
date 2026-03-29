@@ -3,8 +3,8 @@ import { createHash } from 'node:crypto'
 import { and, eq } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
-import { sqlTimestamp } from '@/lib/sql-timestamp'
 import { apiTokens } from '@/lib/drizzle-schema'
+import { sqlTimestamp } from '@/lib/sql-timestamp'
 
 const STORED_HASH_PREFIX = 'h$'
 

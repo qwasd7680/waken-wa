@@ -20,8 +20,8 @@ import {
   GENERATED_HASH_KEY_MAX_LENGTH,
   WEB_ADMIN_QUICK_ADD_DEVICE_HASH_KEY,
 } from '@/lib/device-constants'
-import { sqlTimestamp } from '@/lib/sql-timestamp'
 import { devices, userActivities } from '@/lib/drizzle-schema'
+import { sqlTimestamp } from '@/lib/sql-timestamp'
 import { USER_ACTIVITY_PERSIST_MAX_SEC, USER_ACTIVITY_PERSIST_MIN_SEC } from '@/lib/user-activity-persist'
 
 // Force dynamic rendering; disable caching

@@ -14,9 +14,9 @@ import {
   GENERATED_HASH_KEY_MIN_LENGTH,
   WEB_ADMIN_QUICK_ADD_DEVICE_HASH_KEY,
 } from '@/lib/device-constants'
+import { apiTokens, devices } from '@/lib/drizzle-schema'
 import { buildDeviceApprovalUrl } from '@/lib/public-request-url'
 import { sqlTimestamp } from '@/lib/sql-timestamp'
-import { apiTokens, devices } from '@/lib/drizzle-schema'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0

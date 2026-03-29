@@ -7,8 +7,8 @@ import {
   USER_PERSIST_EXPIRES_AT_METADATA_KEY,
 } from '@/lib/activity-store'
 import { db } from '@/lib/db'
-import { sqlTimestamp } from '@/lib/sql-timestamp'
 import { devices, userActivities } from '@/lib/drizzle-schema'
+import { sqlTimestamp } from '@/lib/sql-timestamp'
 
 let userActivityHydratedFromDb = false
 

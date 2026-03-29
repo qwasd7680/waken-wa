@@ -28,11 +28,11 @@ import {
   normalizeScheduleGridByWeekday,
 } from '@/lib/schedule-grid-by-weekday'
 import {
+  parseHistoryWindowMinutes,
+  parseProcessStaleSeconds,
   SITE_CONFIG_SCHEDULE_HOME_AFTER_CLASSES_LABEL_DEFAULT,
   SITE_CONFIG_SCHEDULE_HOME_AFTER_CLASSES_LABEL_MAX_LEN,
   SITE_CONFIG_SCHEDULE_SLOT_DEFAULT_MINUTES,
-  parseHistoryWindowMinutes,
-  parseProcessStaleSeconds,
 } from '@/lib/site-config-constants'
 import { normalizeCustomCss } from '@/lib/theme-css'
 import { parseThemeCustomSurface } from '@/lib/theme-custom-surface'
