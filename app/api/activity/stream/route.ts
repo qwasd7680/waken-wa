@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 const MAX_CONCURRENT_STREAMS = 50
-const MAX_STREAM_DURATION_MS = 300 * 1000 // 300s
+const MAX_STREAM_DURATION_MS = 500 * 1000 // 500s
 const POLL_INTERVAL_MS = 15 * 1000 // 15 秒轮询间隔
 
 let activeStreams = 0

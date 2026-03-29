@@ -25,6 +25,17 @@ export function useActivityFeed(options: UseActivityFeedOptions = {}) {
   const eventSourceRef = useRef<EventSource | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** When false, SSE `error` events are ignored (tab hidden or effect teardown). */
+  const allowSseReconnectRef = useRef(true)
+
+  const [tabVisible, setTabVisible] = useState(true)
+
+  useEffect(() => {
+    const sync = () => setTabVisible(document.visibilityState === 'visible')
+    sync()
+    document.addEventListener('visibilitychange', sync)
+    return () => document.removeEventListener('visibilitychange', sync)
+  }, [])
 
   const fetchData = useCallback(async () => {
     try {
@@ -69,6 +80,7 @@ export function useActivityFeed(options: UseActivityFeedOptions = {}) {
   }, [stopPolling])
 
   const connectSSE = useCallback(() => {
+    allowSseReconnectRef.current = true
     cleanupAll()
 
     const source = new EventSource('/api/activity/stream')
@@ -89,6 +101,7 @@ export function useActivityFeed(options: UseActivityFeedOptions = {}) {
     }
 
     const onError = () => {
+      if (!allowSseReconnectRef.current) return
       failureCountRef.current++
       source.close()
       eventSourceRef.current = null
@@ -114,7 +127,14 @@ export function useActivityFeed(options: UseActivityFeedOptions = {}) {
     }
   }, [cleanupAll, startPolling])
 
+  // A: provider stays on home only (unmount disconnects). C: pause while tab is hidden.
   useEffect(() => {
+    if (!tabVisible) {
+      allowSseReconnectRef.current = false
+      cleanupAll()
+      return
+    }
+
     let cleanup: (() => void) | undefined
 
     if (mode === 'polling') {
@@ -124,10 +144,11 @@ export function useActivityFeed(options: UseActivityFeedOptions = {}) {
     }
 
     return () => {
+      allowSseReconnectRef.current = false
       cleanup?.()
       cleanupAll()
     }
-  }, [mode, connectSSE, startPolling, cleanupAll])
+  }, [mode, tabVisible, connectSSE, startPolling, cleanupAll])
 
   return { feed, error, connectionMode }
 }
