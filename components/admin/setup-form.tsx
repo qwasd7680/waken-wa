@@ -359,7 +359,7 @@ export function SetupForm({ needAdminSetup, initialConfig }: SetupFormProps) {
         aspectMode="square"
         outputSize={64}
         title="裁剪头像"
-        description="请在图片上拖拽框选区域，确认后将生成 64x64 头像。"
+        description="拖动选区或边角调整范围，滑块缩放图片；确认后生成 64×64 头像。"
         onComplete={(dataUrl) => {
           setAvatarUrl(dataUrl)
         }}

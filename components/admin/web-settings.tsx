@@ -1,8 +1,9 @@
 'use client'
 
 import Image from 'next/image'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
+import { ImageCropDialog } from '@/components/admin/image-crop-dialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -53,8 +54,6 @@ import {
 } from '@/lib/theme-custom-surface'
 import { DEFAULT_TIMEZONE, normalizeTimezone,TIMEZONE_OPTIONS } from '@/lib/timezone'
 
-const CROP_VIEW_SIZE = 320
-const CROP_FRAME_SIZE = 220
 /** Paginate tall “规则” cards */
 const SETTINGS_RULES_PAGE_SIZE = 5
 /** Paginate compact app-name rows */
@@ -113,13 +112,6 @@ function ListPaginationBar({
       </div>
     </div>
   )
-}
-
-function getMinZoom(naturalW: number, naturalH: number): number {
-  if (!naturalW || !naturalH) return 0.2
-  const fitScale = Math.min(CROP_VIEW_SIZE / naturalW, CROP_VIEW_SIZE / naturalH)
-  const baseScale = Math.max(CROP_FRAME_SIZE / naturalW, CROP_FRAME_SIZE / naturalH)
-  return Math.max(0.1, fitScale / baseScale)
 }
 
 type ThemeCustomSurfaceForm = {
@@ -425,11 +417,6 @@ export function WebSettings() {
   // 裁剪弹窗状态
   const [cropSourceUrl, setCropSourceUrl] = useState<string | null>(null)
   const [cropDialogOpen, setCropDialogOpen] = useState(false)
-  const [cropZoom, setCropZoom] = useState(1)
-  const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 })
-  const [dragStart, setDragStart] = useState<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null)
-  const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 })
-  const cropImageRef = useRef<HTMLImageElement | null>(null)
   const [inspirationDevices, setInspirationDevices] = useState<
     Array<{ id: number; displayName: string; generatedHashKey: string; status: string }>
   >([])
@@ -630,64 +617,12 @@ export function WebSettings() {
     }))
   }
 
-  const getBaseScale = () => {
-    if (!naturalSize.width || !naturalSize.height) return 1
-    return Math.max(CROP_FRAME_SIZE / naturalSize.width, CROP_FRAME_SIZE / naturalSize.height)
-  }
-
-  const clampOffset = (x: number, y: number, zoom = cropZoom) => {
-    if (!naturalSize.width || !naturalSize.height) return { x: 0, y: 0 }
-    const totalScale = getBaseScale() * zoom
-    const renderedWidth = naturalSize.width * totalScale
-    const renderedHeight = naturalSize.height * totalScale
-    const maxX = Math.max(0, (renderedWidth - CROP_FRAME_SIZE) / 2)
-    const maxY = Math.max(0, (renderedHeight - CROP_FRAME_SIZE) / 2)
-    return {
-      x: Math.min(maxX, Math.max(-maxX, x)),
-      y: Math.min(maxY, Math.max(-maxY, y)),
-    }
-  }
-
   const onFileSelected = (file?: File) => {
     if (!file) return
     if (cropSourceUrl) URL.revokeObjectURL(cropSourceUrl)
     const objectUrl = URL.createObjectURL(file)
     setCropSourceUrl(objectUrl)
-    setCropZoom(1)
-    setCropOffset({ x: 0, y: 0 })
-    setDragStart(null)
     setCropDialogOpen(true)
-  }
-
-  const applyCrop = () => {
-    if (!cropSourceUrl || !cropImageRef.current || !naturalSize.width || !naturalSize.height) return
-    const totalScale = getBaseScale() * cropZoom
-    const imageLeft = CROP_VIEW_SIZE / 2 + cropOffset.x - (naturalSize.width * totalScale) / 2
-    const imageTop = CROP_VIEW_SIZE / 2 + cropOffset.y - (naturalSize.height * totalScale) / 2
-    const frameLeft = (CROP_VIEW_SIZE - CROP_FRAME_SIZE) / 2
-    const frameTop = (CROP_VIEW_SIZE - CROP_FRAME_SIZE) / 2
-
-    let sx = (frameLeft - imageLeft) / totalScale
-    let sy = (frameTop - imageTop) / totalScale
-    let sw = CROP_FRAME_SIZE / totalScale
-    let sh = CROP_FRAME_SIZE / totalScale
-
-    sx = Math.max(0, Math.min(sx, naturalSize.width - sw))
-    sy = Math.max(0, Math.min(sy, naturalSize.height - sh))
-    sw = Math.max(1, Math.min(sw, naturalSize.width))
-    sh = Math.max(1, Math.min(sh, naturalSize.height))
-
-    const canvas = document.createElement('canvas')
-    canvas.width = 64
-    canvas.height = 64
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.drawImage(cropImageRef.current, sx, sy, sw, sh, 0, 0, 64, 64)
-    patch('avatarUrl', canvas.toDataURL('image/png'))
-    setCropDialogOpen(false)
-    URL.revokeObjectURL(cropSourceUrl)
-    setCropSourceUrl(null)
-    setDragStart(null)
   }
 
   const save = async () => {
@@ -1183,113 +1118,24 @@ export function WebSettings() {
         )}
       </div>
 
-      <Dialog open={cropDialogOpen} onOpenChange={setCropDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[min(92dvh,900px)] overflow-y-auto overscroll-contain">
-          <DialogHeader>
-            <DialogTitle>裁剪头像</DialogTitle>
-            <DialogDescription>
-              在预览框内拖动图片调整取景；下方滑块缩放。手机端请在框内拖动，避免与页面滚动冲突。
-            </DialogDescription>
-          </DialogHeader>
-          {cropSourceUrl && (
-            <div className="space-y-3">
-              <div
-                className="relative mx-auto border border-border rounded-md overflow-hidden bg-black/40 select-none touch-none"
-                style={{ width: CROP_VIEW_SIZE, height: CROP_VIEW_SIZE, touchAction: 'none' }}
-                onPointerDown={(e) => {
-                  if (e.pointerType === 'mouse' && e.button !== 0) return
-                  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-                  setDragStart({
-                    x: e.clientX,
-                    y: e.clientY,
-                    offsetX: cropOffset.x,
-                    offsetY: cropOffset.y,
-                  })
-                }}
-                onPointerMove={(e) => {
-                  if (!dragStart) return
-                  const next = clampOffset(
-                    dragStart.offsetX + e.clientX - dragStart.x,
-                    dragStart.offsetY + e.clientY - dragStart.y,
-                  )
-                  setCropOffset(next)
-                }}
-                onPointerUp={() => setDragStart(null)}
-                onPointerCancel={() => setDragStart(null)}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element -- crop math needs HTMLImageElement + naturalWidth */}
-                <img
-                  ref={cropImageRef}
-                  src={cropSourceUrl}
-                  alt="裁剪预览"
-                  onLoad={() => {
-                    const img = cropImageRef.current
-                    if (!img) return
-                    setNaturalSize({ width: img.naturalWidth, height: img.naturalHeight })
-                    setCropZoom(1)
-                    setCropOffset({ x: 0, y: 0 })
-                  }}
-                  draggable={false}
-                  className="absolute"
-                  style={{
-                    left: `calc(50% + ${cropOffset.x}px)`,
-                    top: `calc(50% + ${cropOffset.y}px)`,
-                    transform: `translate(-50%, -50%) scale(${cropZoom})`,
-                    width: naturalSize.width ? `${naturalSize.width * getBaseScale()}px` : 'auto',
-                    height: naturalSize.height ? `${naturalSize.height * getBaseScale()}px` : 'auto',
-                    cursor: dragStart ? 'grabbing' : 'grab',
-                  }}
-                />
-                <div
-                  className="absolute border-2 border-primary pointer-events-none"
-                  style={{
-                    left: (CROP_VIEW_SIZE - CROP_FRAME_SIZE) / 2,
-                    top: (CROP_VIEW_SIZE - CROP_FRAME_SIZE) / 2,
-                    width: CROP_FRAME_SIZE,
-                    height: CROP_FRAME_SIZE,
-                    boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.35)',
-                  }}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">
-                  缩放
-                </label>
-                <input
-                  type="range"
-                  min={getMinZoom(naturalSize.width, naturalSize.height)}
-                  max={4}
-                  step={0.01}
-                  value={cropZoom}
-                  onChange={(e) => {
-                    const nextZoom = Number(e.target.value)
-                    const nextOffset = clampOffset(cropOffset.x, cropOffset.y, nextZoom)
-                    setCropZoom(nextZoom)
-                    setCropOffset(nextOffset)
-                  }}
-                  className="w-full min-h-11 touch-manipulation"
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <button
-              type="button"
-              onClick={() => setCropDialogOpen(false)}
-              className="px-3 py-2 border border-border rounded-md text-xs font-medium hover:bg-muted transition-colors"
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              onClick={applyCrop}
-              className="px-3 py-2 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-            >
-              确认裁剪
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ImageCropDialog
+        open={cropDialogOpen}
+        onOpenChange={(open) => {
+          setCropDialogOpen(open)
+          if (!open) {
+            setCropSourceUrl((prev) => {
+              if (prev) URL.revokeObjectURL(prev)
+              return null
+            })
+          }
+        }}
+        sourceUrl={cropSourceUrl}
+        aspectMode="square"
+        outputSize={64}
+        title="裁剪头像"
+        description="拖动选区或边角调整范围，滑块缩放图片；确认后生成 64×64 头像。"
+        onComplete={(dataUrl) => patch('avatarUrl', dataUrl)}
+      />
 
       <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/10 px-4 py-3">
         <div className="space-y-0.5 min-w-0">

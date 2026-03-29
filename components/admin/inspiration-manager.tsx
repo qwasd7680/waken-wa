@@ -336,7 +336,7 @@ export function InspirationManager() {
         aspectMode="free"
         outputSize={INSPIRATION_MAX_OUTPUT_EDGE}
         title={cropTarget === 'body' ? '裁剪正文配图' : '裁剪封面配图'}
-        description="拖动图片平移，滑块缩放，拖角点调整裁剪框；确认后导出 PNG。"
+        description="拖动选区或边角调整范围，滑块缩放图片；确认后导出 PNG。"
         onComplete={(dataUrl) => {
           if (cropTarget === 'cover') {
             setImageDataUrl(dataUrl)

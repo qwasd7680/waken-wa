@@ -1,6 +1,15 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import 'react-image-crop/dist/ReactCrop.css'
+
+import { useCallback, useEffect, useRef, useState } from 'react'
+import ReactCrop, {
+  centerCrop,
+  convertToPixelCrop,
+  type Crop,
+  makeAspectCrop,
+  type PixelCrop,
+} from 'react-image-crop'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -11,63 +20,50 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Slider } from '@/components/ui/slider'
 import type { ImageCropAspectMode, ImageCropDialogProps } from '@/types/components'
 
 export type { ImageCropDialogProps } from '@/types/components'
 
-const CROP_VIEW_SIZE = 320
-const DEFAULT_SQUARE_FRAME = 220
-const MIN_FRAME = 48
-const MIN_SQUARE_FRAME = 80
+const MAX_VIEW = 320
 
-type CropRect = { x: number; y: number; w: number; h: number }
+function toOutputPng(
+  image: HTMLImageElement,
+  pixelCrop: PixelCrop,
+  aspectMode: ImageCropAspectMode,
+  outputSize: number,
+): string {
+  const scaleX = image.naturalWidth / image.width
+  const scaleY = image.naturalHeight / image.height
+  let sx = pixelCrop.x * scaleX
+  let sy = pixelCrop.y * scaleY
+  let sw = pixelCrop.width * scaleX
+  let sh = pixelCrop.height * scaleY
 
-/** Clamp r so it stays inside [0, view] on both axes. */
-function clampRectToView(r: CropRect, view: number): CropRect {
-  let { x, y, w, h } = r
-  w = Math.max(MIN_FRAME, Math.min(w, view))
-  h = Math.max(MIN_FRAME, Math.min(h, view))
-  x = Math.max(0, Math.min(x, view - w))
-  y = Math.max(0, Math.min(y, view - h))
-  return { x, y, w, h }
-}
+  sx = Math.max(0, Math.min(sx, image.naturalWidth - 1))
+  sy = Math.max(0, Math.min(sy, image.naturalHeight - 1))
+  sw = Math.max(1, Math.min(sw, image.naturalWidth - sx))
+  sh = Math.max(1, Math.min(sh, image.naturalHeight - sy))
 
-/** Clamp r so it stays inside the image's current rendered area. */
-function clampRectToImg(
-  r: CropRect,
-  imgLeft: number,
-  imgTop: number,
-  imgRight: number,
-  imgBottom: number
-): CropRect {
-  let { x, y, w, h } = r
-  x = Math.max(imgLeft, Math.min(x, imgRight - MIN_FRAME))
-  y = Math.max(imgTop, Math.min(y, imgBottom - MIN_FRAME))
-  w = Math.max(MIN_FRAME, Math.min(w, imgRight - x))
-  h = Math.max(MIN_FRAME, Math.min(h, imgBottom - y))
-  return { x, y, w, h }
-}
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return ''
 
-function centeredSquare(size: number): CropRect {
-  const s = Math.max(MIN_SQUARE_FRAME, Math.min(size, CROP_VIEW_SIZE - 8))
-  return {
-    x: (CROP_VIEW_SIZE - s) / 2,
-    y: (CROP_VIEW_SIZE - s) / 2,
-    w: s,
-    h: s,
+  if (aspectMode === 'square') {
+    canvas.width = outputSize
+    canvas.height = outputSize
+    ctx.drawImage(image, sx, sy, sw, sh, 0, 0, outputSize, outputSize)
+  } else {
+    const cap = Math.max(64, outputSize)
+    const longEdge = Math.max(sw, sh)
+    const outScale = longEdge > cap ? cap / longEdge : 1
+    canvas.width = Math.max(1, Math.round(sw * outScale))
+    canvas.height = Math.max(1, Math.round(sh * outScale))
+    ctx.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
   }
-}
 
-/** Scale to fit the image inside the view (free mode). */
-function freeBaseScaleOf(nw: number, nh: number): number {
-  if (!nw || !nh) return 1
-  return Math.min(CROP_VIEW_SIZE / nw, CROP_VIEW_SIZE / nh)
-}
-
-/** Scale so the image fills the square frame (square mode). */
-function squareBaseScaleOf(nw: number, nh: number, frame: number): number {
-  if (!nw || !nh) return 1
-  return Math.max(frame / nw, frame / nh)
+  return canvas.toDataURL('image/png')
 }
 
 export function ImageCropDialog({
@@ -80,458 +76,124 @@ export function ImageCropDialog({
   description,
   onComplete,
 }: ImageCropDialogProps) {
-  const [cropZoom, setCropZoom] = useState(1)
-  const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 })
-  const [dragStart, setDragStart] = useState<{
-    x: number
-    y: number
-    offsetX: number
-    offsetY: number
-  } | null>(null)
-  const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 })
-  const [squareFrame, setSquareFrame] = useState(DEFAULT_SQUARE_FRAME)
-  const [cropRect, setCropRect] = useState<CropRect>({
-    x: 60, y: 60, w: 200, h: 200,
-  })
-
-  const resizeRef = useRef<
-    | { kind: 'square'; startX: number; startY: number; startSize: number; corner: 'nw' | 'ne' | 'sw' | 'se' }
-    | { kind: 'free';   startX: number; startY: number; rect: CropRect;    corner: 'nw' | 'ne' | 'sw' | 'se' }
-    | null
-  >(null)
-  const cropImageRef = useRef<HTMLImageElement | null>(null)
-
-  /**
-   * Live snapshot of state needed inside resize useEffect (which has [] deps, so closures are stale).
-   * Updated synchronously on every render.
-   */
-  const liveRef = useRef({
-    cropOffset: { x: 0, y: 0 },
-    cropZoom: 1,
-    nw: 0,
-    nh: 0,
-    freeBaseScale: 1,
-    squareFrame: DEFAULT_SQUARE_FRAME,
-    cropRect: { x: 60, y: 60, w: 200, h: 200 } as CropRect,
-  })
-  liveRef.current = {
-    cropOffset,
-    cropZoom,
-    nw: naturalSize.width,
-    nh: naturalSize.height,
-    freeBaseScale:
-      naturalSize.width && naturalSize.height
-        ? freeBaseScaleOf(naturalSize.width, naturalSize.height)
-        : 1,
-    squareFrame,
-    cropRect,
-  }
+  const [crop, setCrop] = useState<Crop>()
+  const [zoom, setZoom] = useState(1)
+  const [natural, setNatural] = useState({ w: 0, h: 0 })
+  const imgRef = useRef<HTMLImageElement>(null)
+  const initUrlRef = useRef<string | null>(null)
 
   const isSquare = aspectMode === 'square'
 
-  /** Returns image bounds [left, top, right, bottom] in view-pixel space. */
-  const getImgBounds = (
-    offset: { x: number; y: number },
-    zoom: number,
-    nw: number,
-    nh: number,
-    baseScale: number
-  ) => {
-    const rw = nw * baseScale * zoom
-    const rh = nh * baseScale * zoom
-    const cx = CROP_VIEW_SIZE / 2 + offset.x
-    const cy = CROP_VIEW_SIZE / 2 + offset.y
-    return { left: cx - rw / 2, top: cy - rh / 2, right: cx + rw / 2, bottom: cy + rh / 2, rw, rh }
-  }
-
-  /**
-   * Clamp image offset so the image covers the given rect (free mode)
-   * or the square frame (square mode).
-   */
-  const clampOffset = (
-    x: number,
-    y: number,
-    zoom: number,
-    nw: number,
-    nh: number,
-    baseScale: number,
-    rect: CropRect
-  ): { x: number; y: number } => {
-    if (!nw || !nh) return { x: 0, y: 0 }
-    const rw = nw * baseScale * zoom
-    const rh = nh * baseScale * zoom
-
-    if (isSquare) {
-      // image center must stay within ±(renderedSize-frameSize)/2 of view center
-      const maxX = Math.max(0, (rw - squareFrame) / 2)
-      const maxY = Math.max(0, (rh - squareFrame) / 2)
-      return {
-        x: Math.min(maxX, Math.max(-maxX, x)),
-        y: Math.min(maxY, Math.max(-maxY, y)),
-      }
-    }
-
-    // Free mode: image must cover the crop rect
-    // image left = CROP_VIEW_SIZE/2 + x - rw/2, must be ≤ rect.x
-    const maxX = rect.x + rw / 2 - CROP_VIEW_SIZE / 2
-    // image right = CROP_VIEW_SIZE/2 + x + rw/2, must be ≥ rect.x + rect.w
-    const minX = rect.x + rect.w - rw / 2 - CROP_VIEW_SIZE / 2
-    // image top must be ≤ rect.y
-    const maxY = rect.y + rh / 2 - CROP_VIEW_SIZE / 2
-    // image bottom must be ≥ rect.y + rect.h
-    const minY = rect.y + rect.h - rh / 2 - CROP_VIEW_SIZE / 2
-
-    return {
-      x: Math.min(maxX, Math.max(minX, x)),
-      y: Math.min(maxY, Math.max(minY, y)),
-    }
-  }
-
-  // Current base scale (derived from state, not activeRect-dependent in free mode)
-  const baseScale =
-    naturalSize.width && naturalSize.height
-      ? isSquare
-        ? squareBaseScaleOf(naturalSize.width, naturalSize.height, squareFrame)
-        : freeBaseScaleOf(naturalSize.width, naturalSize.height)
+  const baseFit =
+    natural.w > 0 && natural.h > 0
+      ? Math.min(MAX_VIEW / natural.w, MAX_VIEW / natural.h)
       : 1
+  const dispW = Math.max(1, Math.round(natural.w * baseFit * zoom))
+  const dispH = Math.max(1, Math.round(natural.h * baseFit * zoom))
 
-  // Re-clamp offset when square frame changes
-  useEffect(() => {
-    if (!isSquare || !naturalSize.width) return
-    const bs = squareBaseScaleOf(naturalSize.width, naturalSize.height, squareFrame)
-    setCropOffset((prev) =>
-      clampOffset(prev.x, prev.y, cropZoom, naturalSize.width, naturalSize.height, bs, cropRect)
-    )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [squareFrame, isSquare, naturalSize.width, naturalSize.height])
+  const initCropForImage = useCallback(
+    (img: HTMLImageElement) => {
+      const w = img.width
+      const h = img.height
+      if (!w || !h) return
+      const next = isSquare
+        ? centerCrop(makeAspectCrop({ unit: '%', width: 75 }, 1, w, h), w, h)
+        : centerCrop({ unit: '%', width: 85, height: 80 }, w, h)
+      setCrop(next)
+    },
+    [isSquare],
+  )
 
-  // Reset on new source
   useEffect(() => {
-    if (!sourceUrl) return
-    setCropZoom(1)
-    setCropOffset({ x: 0, y: 0 })
-    setNaturalSize({ width: 0, height: 0 })
-    setDragStart(null)
-    resizeRef.current = null
-    setSquareFrame(DEFAULT_SQUARE_FRAME)
+    initUrlRef.current = null
   }, [sourceUrl])
 
-  const onCropImageLoad = () => {
-    const image = cropImageRef.current
-    if (!image) return
-    const nw = image.naturalWidth
-    const nh = image.naturalHeight
-    setNaturalSize({ width: nw, height: nh })
-    setCropZoom(1)
-    setCropOffset({ x: 0, y: 0 })
-
-    if (!isSquare && nw && nh) {
-      // Init crop rect to ~90% of the image's rendered area (zoom=1, offset=0)
-      const bs = freeBaseScaleOf(nw, nh)
-      const rw = nw * bs
-      const rh = nh * bs
-      const imgLeft = CROP_VIEW_SIZE / 2 - rw / 2
-      const imgTop  = CROP_VIEW_SIZE / 2 - rh / 2
-      const fw = rw * 0.9
-      const fh = rh * 0.9
-      setCropRect({
-        x: imgLeft + (rw - fw) / 2,
-        y: imgTop  + (rh - fh) / 2,
-        w: fw,
-        h: fh,
-      })
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      initUrlRef.current = null
+      setCrop(undefined)
+      setNatural({ w: 0, h: 0 })
+      setZoom(1)
     }
+    onOpenChange(next)
   }
 
-  const activeRect: CropRect = isSquare ? centeredSquare(squareFrame) : cropRect
+  const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget
+    const url = sourceUrl
+    setNatural({ w: img.naturalWidth, h: img.naturalHeight })
+    requestAnimationFrame(() => {
+      if (!url || !img.width || !img.height) return
+      if (initUrlRef.current === url) return
+      initUrlRef.current = url
+      initCropForImage(img)
+    })
+  }
 
   const applyCrop = () => {
-    if (!sourceUrl || !cropImageRef.current || !naturalSize.width || !naturalSize.height) return
-    const { width: nw, height: nh } = naturalSize
-    const totalScale = baseScale * cropZoom
-    const imageLeft = CROP_VIEW_SIZE / 2 + cropOffset.x - (nw * totalScale) / 2
-    const imageTop  = CROP_VIEW_SIZE / 2 + cropOffset.y - (nh * totalScale) / 2
-
-    let sx = (activeRect.x - imageLeft) / totalScale
-    let sy = (activeRect.y - imageTop)  / totalScale
-    let sw = activeRect.w / totalScale
-    let sh = activeRect.h / totalScale
-
-    sx = Math.max(0, Math.min(sx, nw - sw))
-    sy = Math.max(0, Math.min(sy, nh - sh))
-    sw = Math.max(1, Math.min(sw, nw))
-    sh = Math.max(1, Math.min(sh, nh))
-
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    if (isSquare) {
-      canvas.width = outputSize
-      canvas.height = outputSize
-      ctx.drawImage(cropImageRef.current, sx, sy, sw, sh, 0, 0, outputSize, outputSize)
-    } else {
-      const cap = Math.max(64, outputSize)
-      const longEdge = Math.max(sw, sh)
-      const outScale = longEdge > cap ? cap / longEdge : 1
-      canvas.width  = Math.max(1, Math.round(sw * outScale))
-      canvas.height = Math.max(1, Math.round(sh * outScale))
-      ctx.drawImage(cropImageRef.current, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
-    }
-
-    onComplete(canvas.toDataURL('image/png'))
-    onOpenChange(false)
-    setDragStart(null)
-    resizeRef.current = null
+    const img = imgRef.current
+    if (!img || !crop || !natural.w) return
+    const pixel = convertToPixelCrop(crop, img.width, img.height)
+    const dataUrl = toOutputPng(img, pixel, aspectMode, outputSize)
+    onComplete(dataUrl)
+    handleOpenChange(false)
   }
 
-  const minZoom = (() => {
-    const { width: nw, height: nh } = naturalSize
-    if (!nw || !nh) return 0.2
-    if (isSquare) {
-      const fitScale = Math.min(CROP_VIEW_SIZE / nw, CROP_VIEW_SIZE / nh)
-      return Math.max(0.1, fitScale / squareBaseScaleOf(nw, nh, squareFrame))
-    }
-    return 0.5
-  })()
-
-  const onCornerPointerDown = (corner: 'nw' | 'ne' | 'sw' | 'se', e: React.PointerEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (isSquare) {
-      resizeRef.current = { kind: 'square', startX: e.clientX, startY: e.clientY, startSize: squareFrame, corner }
-    } else {
-      resizeRef.current = { kind: 'free', corner, startX: e.clientX, startY: e.clientY, rect: { ...cropRect } }
-    }
-  }
-
-  // Global pointer move/up for resizing (mouse + touch) — uses liveRef to avoid stale closures
-  useEffect(() => {
-    const onMove = (e: PointerEvent) => {
-      const r = resizeRef.current
-      if (!r) return
-      const dx = e.clientX - r.startX
-      const dy = e.clientY - r.startY
-
-      if (r.kind === 'square') {
-        let dSize = 0
-        switch (r.corner) {
-          case 'se': dSize =  dx + dy; break
-          case 'nw': dSize = -dx - dy; break
-          case 'ne': dSize =  dx - dy; break
-          case 'sw': dSize = -dx + dy; break
-        }
-        setSquareFrame((prev) =>
-          Math.max(MIN_SQUARE_FRAME, Math.min(Math.round(r.startSize + dSize), CROP_VIEW_SIZE - 8))
-        )
-        return
-      }
-
-      // --- Free mode: build candidate rect, then clamp to image bounds ---
-      const start = r.rect
-      let candidate: CropRect
-      switch (r.corner) {
-        case 'se': candidate = { x: start.x,       y: start.y,       w: start.w + dx, h: start.h + dy }; break
-        case 'sw': candidate = { x: start.x + dx,  y: start.y,       w: start.w - dx, h: start.h + dy }; break
-        case 'ne': candidate = { x: start.x,       y: start.y + dy,  w: start.w + dx, h: start.h - dy }; break
-        case 'nw': candidate = { x: start.x + dx,  y: start.y + dy,  w: start.w - dx, h: start.h - dy }; break
-        default:   candidate = start
-      }
-
-      // First clamp to view, then clamp to image rendered area
-      const inView = clampRectToView(candidate, CROP_VIEW_SIZE)
-      const live = liveRef.current
-      if (live.nw && live.nh) {
-        const { left, top, right, bottom } = {
-          ...(() => {
-            const rw = live.nw * live.freeBaseScale * live.cropZoom
-            const rh = live.nh * live.freeBaseScale * live.cropZoom
-            const cx = CROP_VIEW_SIZE / 2 + live.cropOffset.x
-            const cy = CROP_VIEW_SIZE / 2 + live.cropOffset.y
-            return { left: cx - rw / 2, top: cy - rh / 2, right: cx + rw / 2, bottom: cy + rh / 2 }
-          })(),
-        }
-        setCropRect(clampRectToImg(inView, left, top, right, bottom))
-      } else {
-        setCropRect(inView)
-      }
-    }
-
-    const onUp = () => {
-      resizeRef.current = null
-    }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
-    window.addEventListener('pointercancel', onUp)
-    return () => {
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-      window.removeEventListener('pointercancel', onUp)
-    }
-  }, [])
-
-  /** Visual size of corner knob; hit area uses TOUCH_HANDLE_PX for mobile-friendly targets */
-  const handleSize = 10
-  const TOUCH_HANDLE_PX = 44
+  const minZoom = 0.25
+  const maxZoom = 3
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[min(92dvh,900px)] overflow-y-auto overscroll-contain">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
+
         {sourceUrl && (
-          <div className="space-y-3">
-            <div
-              className="relative mx-auto border border-border rounded-md overflow-hidden bg-black/40 touch-none select-none"
-              style={{ width: CROP_VIEW_SIZE, height: CROP_VIEW_SIZE, touchAction: 'none' }}
-              onPointerDown={(e) => {
-                if (e.pointerType === 'mouse' && e.button !== 0) return
-                if ((e.target as HTMLElement).closest('[data-crop-handle]')) return
-                ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-                setDragStart({
-                  x: e.clientX,
-                  y: e.clientY,
-                  offsetX: cropOffset.x,
-                  offsetY: cropOffset.y,
-                })
-              }}
-              onPointerMove={(e) => {
-                if (!dragStart || resizeRef.current) return
-                const ddx = e.clientX - dragStart.x
-                const ddy = e.clientY - dragStart.y
-                const next = clampOffset(
-                  dragStart.offsetX + ddx,
-                  dragStart.offsetY + ddy,
-                  cropZoom,
-                  naturalSize.width,
-                  naturalSize.height,
-                  baseScale,
-                  cropRect
-                )
-                setCropOffset(next)
-              }}
-              onPointerUp={() => setDragStart(null)}
-              onPointerCancel={() => setDragStart(null)}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element -- crop math needs HTMLImageElement + naturalWidth */}
-              <img
-                ref={cropImageRef}
-                src={sourceUrl}
-                alt="crop preview"
-                onLoad={onCropImageLoad}
-                className="absolute select-none"
-                draggable={false}
-                style={{
-                  left: `calc(50% + ${cropOffset.x}px)`,
-                  top: `calc(50% + ${cropOffset.y}px)`,
-                  transform: `translate(-50%, -50%) scale(${cropZoom})`,
-                  width:  naturalSize.width  ? `${naturalSize.width  * baseScale}px` : 'auto',
-                  height: naturalSize.height ? `${naturalSize.height * baseScale}px` : 'auto',
-                  cursor: dragStart ? 'grabbing' : 'grab',
-                }}
-              />
-
-              {/* Crop frame */}
-              <div
-                className="absolute border-2 border-primary pointer-events-none z-[1]"
-                style={{
-                  left:   activeRect.x,
-                  top:    activeRect.y,
-                  width:  activeRect.w,
-                  height: activeRect.h,
-                  boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.40)',
-                }}
-              />
-
-              {/* Rule-of-thirds guide lines */}
-              <div
-                className="absolute pointer-events-none z-[1]"
-                style={{ left: activeRect.x, top: activeRect.y, width: activeRect.w, height: activeRect.h }}
+          <div className="space-y-4">
+            <div className="flex max-h-[min(65dvh,420px)] w-full justify-center overflow-auto rounded-md border border-border bg-muted/30 p-2">
+              <ReactCrop
+                crop={crop}
+                aspect={isSquare ? 1 : undefined}
+                minWidth={24}
+                minHeight={24}
+                keepSelection
+                ruleOfThirds
+                onChange={(_, percentCrop) => setCrop(percentCrop)}
               >
-                {[33.33, 66.66].map((pct) => (
-                  <span
-                    key={`v${pct}`}
-                    className="absolute top-0 bottom-0"
-                    style={{ left: `${pct}%`, borderLeft: '1px solid rgba(255,255,255,0.18)' }}
-                  />
-                ))}
-                {[33.33, 66.66].map((pct) => (
-                  <span
-                    key={`h${pct}`}
-                    className="absolute left-0 right-0"
-                    style={{ top: `${pct}%`, borderTop: '1px solid rgba(255,255,255,0.18)' }}
-                  />
-                ))}
-              </div>
-
-              {/* Corner resize handles: large hit area for touch, small visible knob */}
-              {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => {
-                const cx = corner.includes('w') ? activeRect.x : activeRect.x + activeRect.w
-                const cy = corner.includes('n') ? activeRect.y : activeRect.y + activeRect.h
-                const left = cx - TOUCH_HANDLE_PX / 2
-                const top = cy - TOUCH_HANDLE_PX / 2
-                return (
-                  <div
-                    key={corner}
-                    data-crop-handle
-                    role="presentation"
-                    className="absolute z-[3] flex items-center justify-center touch-none"
-                    style={{
-                      width: TOUCH_HANDLE_PX,
-                      height: TOUCH_HANDLE_PX,
-                      left,
-                      top,
-                      pointerEvents: 'auto',
-                      cursor: corner === 'nw' || corner === 'se' ? 'nwse-resize' : 'nesw-resize',
-                      touchAction: 'none',
-                    }}
-                    onPointerDown={(e) => onCornerPointerDown(corner, e)}
-                  >
-                    <span
-                      className="border-2 border-primary bg-background rounded-[2px] shrink-0"
-                      style={{ width: handleSize, height: handleSize }}
-                    />
-                  </div>
-                )
-              })}
+                {/* eslint-disable-next-line @next/next/no-img-element -- need HTMLImageElement + natural dimensions for canvas export */}
+                <img
+                  ref={imgRef}
+                  src={sourceUrl}
+                  alt=""
+                  width={dispW}
+                  height={dispH}
+                  onLoad={onImageLoad}
+                  draggable={false}
+                  className="max-w-none"
+                />
+              </ReactCrop>
             </div>
-
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">
-                {isSquare
-                  ? '缩放'
-                  : '缩放'}
-              </label>
-              <input
-                type="range"
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">缩放</Label>
+              <Slider
                 min={minZoom}
-                max={4}
-                step={0.01}
-                value={cropZoom}
-                className="w-full min-h-11 touch-manipulation"
-                onChange={(e) => {
-                  const nextZoom = Number(e.target.value)
-                  const bs = isSquare
-                    ? squareBaseScaleOf(naturalSize.width, naturalSize.height, squareFrame)
-                    : freeBaseScaleOf(naturalSize.width, naturalSize.height)
-                  const next = clampOffset(
-                    cropOffset.x, cropOffset.y, nextZoom,
-                    naturalSize.width, naturalSize.height, bs, cropRect
-                  )
-                  setCropZoom(nextZoom)
-                  setCropOffset(next)
-                }}
+                max={maxZoom}
+                step={0.02}
+                value={[zoom]}
+                onValueChange={(v) => setZoom(v[0] ?? 1)}
+                className="w-full"
               />
             </div>
           </div>
         )}
+
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
             取消
           </Button>
-          <Button type="button" onClick={applyCrop}>
+          <Button type="button" onClick={applyCrop} disabled={!crop || !natural.w}>
             确认裁剪
           </Button>
         </DialogFooter>
