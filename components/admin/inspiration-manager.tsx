@@ -193,7 +193,10 @@ export function InspirationManager() {
                   id="insp-file"
                   type="file"
                   accept="image/*"
-                  onChange={(e) => openCropForFile(e.target.files?.[0], 'cover')}
+                  onChange={(e) => {
+                    openCropForFile(e.target.files?.[0], 'cover')
+                    e.target.value = ''
+                  }}
                 />
                 <p className="text-xs text-muted-foreground">
                   长边上限约 {INSPIRATION_MAX_OUTPUT_EDGE}px，比例可任意调整

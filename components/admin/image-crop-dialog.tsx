@@ -2,7 +2,7 @@
 
 import 'react-image-crop/dist/ReactCrop.css'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import ReactCrop, {
   centerCrop,
   convertToPixelCrop,
@@ -108,6 +108,27 @@ export function ImageCropDialog({
     initUrlRef.current = null
   }, [sourceUrl])
 
+  // Init crop after `natural`/`dispW`/`dispH` commit so `img.width`/`img.height` match the layout
+  // (avoid racing onLoad rAF when displayed size was still the 1×1 placeholder).
+  useLayoutEffect(() => {
+    if (!open || !sourceUrl) return
+    const img = imgRef.current
+    if (!img || !natural.w || !natural.h) return
+    if (initUrlRef.current === sourceUrl) return
+    if (!img.complete || img.naturalWidth < 1) return
+    if (img.width !== dispW || img.height !== dispH) return
+    initUrlRef.current = sourceUrl
+    initCropForImage(img)
+  }, [
+    open,
+    sourceUrl,
+    natural.w,
+    natural.h,
+    dispW,
+    dispH,
+    initCropForImage,
+  ])
+
   const handleOpenChange = (next: boolean) => {
     if (!next) {
       initUrlRef.current = null
@@ -120,14 +141,7 @@ export function ImageCropDialog({
 
   const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget
-    const url = sourceUrl
     setNatural({ w: img.naturalWidth, h: img.naturalHeight })
-    requestAnimationFrame(() => {
-      if (!url || !img.width || !img.height) return
-      if (initUrlRef.current === url) return
-      initUrlRef.current = url
-      initCropForImage(img)
-    })
   }
 
   const applyCrop = () => {

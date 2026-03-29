@@ -11,7 +11,7 @@ const nextConfig = {
   transpilePackages: ['ical.js'],
   serverExternalPackages: ['pg', 'better-sqlite3'],
   outputFileTracingIncludes: {
-    '/*': ['./drizzle/**/*'],
+    '/*': ['./drizzle/**/*', './styles/theme-presets/**/*'],
   },
   typescript: {
     ignoreBuildErrors: false,
