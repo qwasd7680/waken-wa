@@ -170,7 +170,9 @@ function MediaAndSteamRow({
             'flex min-w-0 overflow-hidden',
             // With media: keep Steam on the right half, flush end within that column.
             // Steam only: align like the media row (icon + title from the left), not stuck on the card edge.
-            pair ? 'max-w-[50%] min-w-0 flex-1 basis-0 justify-end' : 'w-full min-w-0 justify-start',
+            pair
+              ? 'max-w-[50%] min-w-0 flex-1 basis-0 items-center justify-end'
+              : 'w-full min-w-0 items-center justify-start',
           )}
         >
           <HoverCard openDelay={120}>
@@ -178,7 +180,10 @@ function MediaAndSteamRow({
               <button
                 type="button"
                 className={cn(
-                  'inline-flex max-w-full min-w-0 items-center gap-2 rounded-md transition-colors',
+                  'min-w-0 items-center gap-2 rounded-md transition-colors',
+                  // Steam-only: full-width flex row so MarqueeIfNeeded (flex-1) gets real width like the media row.
+                  // Paired with media: inline-flex stays compact on the right half.
+                  pair ? 'inline-flex max-w-full' : 'flex w-full',
                   'hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 )}
               >
