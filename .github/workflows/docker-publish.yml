@@ -7,6 +7,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  IMAGE_TITLE: ${{ github.event.repository.name }}
 
 jobs:
   build:
@@ -49,6 +50,6 @@ jobs:
       - name: Delete old images
         uses: actions/delete-package-versions@v5
         with:
-          package-name: ${{ env.IMAGE_NAME }}
+          package-name: ${{ env.IMAGE_TITLE }}
           package-type: container
           min-versions-to-keep: 5
