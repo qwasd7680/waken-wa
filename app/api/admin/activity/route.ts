@@ -25,7 +25,7 @@ import {
   WEB_ADMIN_QUICK_ADD_DEVICE_HASH_KEY,
 } from '@/lib/device-constants'
 import { devices, userActivities } from '@/lib/drizzle-schema'
-import { sqlTimestamp } from '@/lib/sql-timestamp'
+import { sqlDate, sqlTimestamp } from '@/lib/sql-timestamp'
 import { USER_ACTIVITY_PERSIST_MAX_SEC, USER_ACTIVITY_PERSIST_MIN_SEC } from '@/lib/user-activity-persist'
 
 // Force dynamic rendering; disable caching
@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
 
     if (adminPersistSeconds != null && adminExpiresAt) {
       const now = sqlTimestamp()
-      const expiresAtIso = adminExpiresAt.toISOString()
+      const expiresAtVal = sqlDate(adminExpiresAt)
       await db
         .insert(userActivities)
         .values({
@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
           processName: process_name,
           processTitle: process_title,
           metadata: finalMetadata,
-          expiresAt: expiresAtIso,
+          expiresAt: expiresAtVal,
           updatedAt: now,
         })
         .onConflictDoUpdate({
@@ -223,7 +223,7 @@ export async function POST(request: NextRequest) {
             generatedHashKey: effectiveHashKey,
             processTitle: process_title,
             metadata: finalMetadata,
-            expiresAt: expiresAtIso,
+            expiresAt: expiresAtVal,
             updatedAt: now,
           },
         })
