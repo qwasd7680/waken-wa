@@ -2006,7 +2006,6 @@ export function WebSettings() {
               <Label htmlFor="hcaptcha-secretkey">Secret Key（留空则不修改已保存的值）</Label>
               <Input
                 id="hcaptcha-secretkey"
-                type="password"
                 value={form.hcaptchaSecretKey}
                 onChange={(e) => patch('hcaptchaSecretKey', e.target.value)}
                 placeholder="留空则保留之前配置的 Secret Key"
