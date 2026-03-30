@@ -83,7 +83,7 @@ export function pickPostgresUrlForInitDb() {
 /**
  * Loads .env then .env.local (same order as Next). Mutates process.env.DATABASE_URL when using PG.
  * @param {{ forInitDb?: boolean, forceProvider?: 'sqlite' | 'postgresql' }} [options]
- * @returns {{ drizzleConfig: string, provider: string }}
+ * @returns {{ drizzleConfig: string, provider: string, onVercel: boolean }}
  */
 export function resolveDatabaseEnv(options = {}) {
   const forInitDb = options.forInitDb === true
@@ -92,10 +92,13 @@ export function resolveDatabaseEnv(options = {}) {
   loadEnvFile(path.join(repoRoot, '.env'))
   loadEnvFile(path.join(repoRoot, '.env.local'))
 
+  // Vercel injects VERCEL=1 automatically; always use PostgreSQL in that environment.
+  const onVercel = process.env.VERCEL === '1'
+
   const inferredPostgres = pick() !== null
   const explicitPostgres = (process.env.DATABASE_PROVIDER || '').toLowerCase() === 'postgresql'
   let provider =
-    inferredPostgres || explicitPostgres
+    onVercel || inferredPostgres || explicitPostgres
       ? 'postgresql'
       : (process.env.DATABASE_PROVIDER || 'sqlite').toLowerCase()
 
@@ -126,5 +129,5 @@ export function resolveDatabaseEnv(options = {}) {
     process.env.DATABASE_URL = ensureLibpqCompat(pgUrl)
   }
 
-  return { drizzleConfig, provider }
+  return { drizzleConfig, provider, onVercel }
 }

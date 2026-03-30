@@ -9,12 +9,15 @@ if (process.env.SKIP_POSTINSTALL_DB === '1') {
 }
 
 try {
-  const { drizzleConfig, provider } = resolveDatabaseEnv({ forInitDb: true })
+  const { drizzleConfig, provider, onVercel } = resolveDatabaseEnv({ forInitDb: true })
 
   function run(cmd) {
     execSync(cmd, { stdio: 'inherit', cwd: repoRoot, env: process.env, shell: true })
   }
 
+  if (onVercel) {
+    console.log('[init-db] VERCEL=1 detected — forcing PostgreSQL')
+  }
   console.log(`[init-db] provider=${provider} config=${drizzleConfig}`)
 
   if (provider === 'sqlite') {
