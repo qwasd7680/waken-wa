@@ -1,10 +1,11 @@
 'use client'
 
 import Image from 'next/image'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ImageCropDialog } from '@/components/admin/image-crop-dialog'
+import { UnsavedChangesBar } from '@/components/admin/unsaved-changes-bar'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -39,6 +40,7 @@ import {
   normalizeHitokotoEncode,
   type UserNoteHitokotoEncode,
 } from '@/lib/hitokoto'
+import { normalizeProfileOnlineAccentColor } from '@/lib/profile-online-accent-color'
 import {
   isAllowedSlotMinutes,
   resolveSchedulePeriodTemplate,
@@ -62,7 +64,6 @@ import {
   SITE_CONFIG_SCHEDULE_HOME_AFTER_CLASSES_LABEL_MAX_LEN,
   SITE_CONFIG_SCHEDULE_SLOT_DEFAULT_MINUTES,
 } from '@/lib/site-config-constants'
-import { normalizeProfileOnlineAccentColor } from '@/lib/profile-online-accent-color'
 import {
   parseThemeCustomSurface,
   THEME_CUSTOM_SURFACE_DEFAULTS,
@@ -464,6 +465,8 @@ export function WebSettings() {
     Array<{ id: number; displayName: string; generatedHashKey: string; status: string }>
   >([])
 
+  const [baselineForm, setBaselineForm] = useState<SiteConfig | null>(null)
+
   const [form, setForm] = useState<SiteConfig>({
     pageTitle: DEFAULT_PAGE_TITLE,
     userName: '',
@@ -541,7 +544,7 @@ export function WebSettings() {
                 .map((item: unknown) => String(item ?? '').trim())
                 .filter((item: string) => item.length > 0)
             : []
-          setForm({
+          const loaded: SiteConfig = {
             pageTitle: data.data.pageTitle ?? DEFAULT_PAGE_TITLE,
             userName: data.data.userName ?? '',
             userBio: data.data.userBio ?? '',
@@ -625,7 +628,9 @@ export function WebSettings() {
             steamEnabled: Boolean(data.data.steamEnabled),
             steamId: String(data.data.steamId ?? ''),
             steamApiKey: '',
-          })
+          }
+          setForm(loaded)
+          setBaselineForm(structuredClone(loaded))
         }
       } finally {
         setLoading(false)
@@ -768,11 +773,17 @@ export function WebSettings() {
         return
       }
       toast.success('保存成功，主页刷新后生效')
+      setBaselineForm(structuredClone(form))
     } catch {
       toast.error('网络异常，请重试')
     } finally {
       setSaving(false)
     }
+  }
+
+  const revertUnsavedWebSettings = () => {
+    if (!baselineForm) return
+    setForm(structuredClone(baselineForm))
   }
 
   const copyExportConfig = async () => {
@@ -851,11 +862,21 @@ export function WebSettings() {
   const noPage = Math.min(nameOnlyListPage, noMaxPage)
   const noStart = noPage * SETTINGS_APP_LIST_PAGE_SIZE
 
+  const webSettingsDirty = useMemo(() => {
+    if (!baselineForm) return false
+    try {
+      return JSON.stringify(form) !== JSON.stringify(baselineForm)
+    } catch {
+      return true
+    }
+  }, [form, baselineForm])
+
   if (loading) {
     return <div className="text-sm text-muted-foreground">加载配置中...</div>
   }
 
   return (
+    <>
     <div className="rounded-xl border bg-card p-6 space-y-5">
       <h3 className="font-semibold text-foreground">Web 配置</h3>
 
@@ -2017,9 +2038,6 @@ export function WebSettings() {
 
 
       <div className="flex flex-wrap gap-3">
-        <Button onClick={save} disabled={saving}>
-          {saving ? '保存中...' : '保存配置'}
-        </Button>
         <Button type="button" variant="outline" onClick={() => void copyExportConfig()}>
           一键复制接入配置（Base64）
         </Button>
@@ -2029,8 +2047,17 @@ export function WebSettings() {
       </div>
       <p className="text-xs text-muted-foreground">
         「一键写入配置」会尝试从剪贴板读取 Base64；若无权限或剪贴板为空，将弹出粘贴框。仅合并导出包中的网页字段到本页表单，不包含
-        Token；写入后需手动保存。
+        Token；写入后请用底部悬浮条保存。
       </p>
     </div>
+    <UnsavedChangesBar
+      open={webSettingsDirty}
+      saving={saving}
+      onSave={save}
+      onRevert={revertUnsavedWebSettings}
+      saveLabel="保存配置"
+      revertLabel="撤销"
+    />
+    </>
   )
 }

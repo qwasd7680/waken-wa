@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { SortablePeriodTemplatePart } from '@/components/admin/sortable-period-template-part'
+import { UnsavedChangesBar } from '@/components/admin/unsaved-changes-bar'
 import { WeekTimetableGrid } from '@/components/admin/week-timetable-grid'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -37,7 +38,6 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { buildAdminSettingsPatchBody } from '@/lib/admin-settings-patch-body'
-import { toastSwitchLabel } from '@/lib/admin-switch-toast'
 import {
   backfillCoursePeriodIdsFromTemplate,
   defaultSchedulePeriodTemplate,
@@ -74,6 +74,18 @@ const PERIOD_PART_LABELS: Record<SchedulePeriodPart, string> = {
   morning: '上午',
   afternoon: '下午',
   evening: '晚上',
+}
+
+/** Fields that PATCH together; used for dirty detection vs last load/save. */
+type ScheduleFormBaseline = {
+  periodTemplate: SchedulePeriodTemplateItem[]
+  courses: ScheduleCourse[]
+  icsRaw: string
+  inClassOnHome: boolean
+  homeShowLocation: boolean
+  homeShowTeacher: boolean
+  homeShowNextUpcoming: boolean
+  homeAfterClassesLabel: string
 }
 
 function emptyCourse(): ScheduleCourse {
@@ -132,6 +144,7 @@ export function ScheduleManager() {
   const [homeAfterClassesLabel, setHomeAfterClassesLabel] = useState(
     SITE_CONFIG_SCHEDULE_HOME_AFTER_CLASSES_LABEL_DEFAULT,
   )
+  const [scheduleBaseline, setScheduleBaseline] = useState<ScheduleFormBaseline | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -141,6 +154,7 @@ export function ScheduleManager() {
       const data = await res.json()
       if (!res.ok || !data?.success || !data?.data) {
         setMessage(data?.error || '加载失败')
+        setScheduleBaseline(null)
         return
       }
       const d = data.data as Record<string, unknown>
@@ -156,17 +170,31 @@ export function ScheduleManager() {
       setHomeShowLocation(Boolean(d.scheduleHomeShowLocation))
       setHomeShowTeacher(Boolean(d.scheduleHomeShowTeacher))
       setHomeShowNextUpcoming(Boolean(d.scheduleHomeShowNextUpcoming))
-      setHomeAfterClassesLabel(
+      const homeLabelResolved =
         typeof d.scheduleHomeAfterClassesLabel === 'string' &&
-          d.scheduleHomeAfterClassesLabel.trim().length > 0
+        d.scheduleHomeAfterClassesLabel.trim().length > 0
           ? d.scheduleHomeAfterClassesLabel.trim().slice(
               0,
               SITE_CONFIG_SCHEDULE_HOME_AFTER_CLASSES_LABEL_MAX_LEN,
             )
-          : SITE_CONFIG_SCHEDULE_HOME_AFTER_CLASSES_LABEL_DEFAULT,
+          : SITE_CONFIG_SCHEDULE_HOME_AFTER_CLASSES_LABEL_DEFAULT
+      setHomeAfterClassesLabel(homeLabelResolved)
+      const icsLoaded = typeof d.scheduleIcs === 'string' ? d.scheduleIcs : ''
+      setScheduleBaseline(
+        structuredClone({
+          periodTemplate: tpl,
+          courses: backfilled.courses,
+          icsRaw: icsLoaded,
+          inClassOnHome: Boolean(d.scheduleInClassOnHome),
+          homeShowLocation: Boolean(d.scheduleHomeShowLocation),
+          homeShowTeacher: Boolean(d.scheduleHomeShowTeacher),
+          homeShowNextUpcoming: Boolean(d.scheduleHomeShowNextUpcoming),
+          homeAfterClassesLabel: homeLabelResolved,
+        }),
       )
     } catch {
       setMessage('网络异常')
+      setScheduleBaseline(null)
     } finally {
       setLoading(false)
     }
@@ -288,11 +316,36 @@ export function ScheduleManager() {
       )
       setCourses(backfilled.courses)
       setCompatWarnings(backfilled.warnings)
+      setScheduleBaseline(
+        structuredClone({
+          periodTemplate: tpl,
+          courses: backfilled.courses,
+          icsRaw,
+          inClassOnHome,
+          homeShowLocation,
+          homeShowTeacher,
+          homeShowNextUpcoming,
+          homeAfterClassesLabel,
+        }),
+      )
     } catch {
       toast.error('网络异常')
     } finally {
       setSaving(false)
     }
+  }
+
+  const revertUnsavedSchedule = () => {
+    if (!scheduleBaseline) return
+    const b = structuredClone(scheduleBaseline)
+    setPeriodTemplate(b.periodTemplate)
+    setCourses(b.courses)
+    setIcsRaw(b.icsRaw)
+    setInClassOnHome(b.inClassOnHome)
+    setHomeShowLocation(b.homeShowLocation)
+    setHomeShowTeacher(b.homeShowTeacher)
+    setHomeShowNextUpcoming(b.homeShowNextUpcoming)
+    setHomeAfterClassesLabel(b.homeAfterClassesLabel)
   }
 
   const openNew = () => {
@@ -470,11 +523,41 @@ export function ScheduleManager() {
     })
   }
 
+  const scheduleDirty = useMemo(() => {
+    if (!scheduleBaseline) return false
+    try {
+      const current: ScheduleFormBaseline = {
+        periodTemplate,
+        courses,
+        icsRaw,
+        inClassOnHome,
+        homeShowLocation,
+        homeShowTeacher,
+        homeShowNextUpcoming,
+        homeAfterClassesLabel,
+      }
+      return JSON.stringify(current) !== JSON.stringify(scheduleBaseline)
+    } catch {
+      return true
+    }
+  }, [
+    periodTemplate,
+    courses,
+    icsRaw,
+    inClassOnHome,
+    homeShowLocation,
+    homeShowTeacher,
+    homeShowNextUpcoming,
+    homeAfterClassesLabel,
+    scheduleBaseline,
+  ])
+
   if (loading) {
     return <div className="text-sm text-muted-foreground">加载课表配置中…</div>
   }
 
   return (
+    <>
     <div className="rounded-xl border border-border/80 bg-card p-4 sm:p-5 shadow-sm space-y-4 sm:space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -501,9 +584,6 @@ export function ScheduleManager() {
             <Download className="h-4 w-4 mr-1" />
             导出 ICS
           </Button>
-          <Button type="button" size="sm" onClick={save} disabled={saving || !serverData}>
-            {saving ? '保存中…' : '保存到站点配置'}
-          </Button>
         </div>
       </div>
 
@@ -516,7 +596,7 @@ export function ScheduleManager() {
       <div className="rounded-lg border border-border/60 bg-muted/10 p-3 space-y-3">
         <h4 className="text-sm font-medium text-foreground">主页展示</h4>
         <p className="text-xs text-muted-foreground">
-          开启后，访客在自己本地时间的上课时段内，会在首页个人资料右侧看到「正在上课」卡片（仍须点击保存写入配置）。
+          开启后，访客在自己本地时间的上课时段内，会在首页个人资料右侧看到「正在上课」卡片。
         </p>
         <div className="flex items-center justify-between gap-3">
           <Label htmlFor="sched-in-class" className="font-normal cursor-pointer">
@@ -525,10 +605,7 @@ export function ScheduleManager() {
           <Switch
             id="sched-in-class"
             checked={inClassOnHome}
-            onCheckedChange={(v) => {
-              setInClassOnHome(v)
-              toastSwitchLabel('上课时间在主页显示「正在上课」', v, { remindSave: true })
-            }}
+            onCheckedChange={setInClassOnHome}
           />
         </div>
         <div className="flex items-center justify-between gap-3">
@@ -538,10 +615,7 @@ export function ScheduleManager() {
           <Switch
             id="sched-home-next"
             checked={homeShowNextUpcoming}
-            onCheckedChange={(v) => {
-              setHomeShowNextUpcoming(v)
-              toastSwitchLabel('在课间显示「下一节」课程预告', v, { remindSave: true })
-            }}
+            onCheckedChange={setHomeShowNextUpcoming}
             disabled={!inClassOnHome}
           />
         </div>
@@ -552,10 +626,7 @@ export function ScheduleManager() {
           <Switch
             id="sched-home-loc"
             checked={homeShowLocation}
-            onCheckedChange={(v) => {
-              setHomeShowLocation(v)
-              toastSwitchLabel('卡片中显示上课地点', v, { remindSave: true })
-            }}
+            onCheckedChange={setHomeShowLocation}
             disabled={!inClassOnHome}
           />
         </div>
@@ -566,10 +637,7 @@ export function ScheduleManager() {
           <Switch
             id="sched-home-teacher"
             checked={homeShowTeacher}
-            onCheckedChange={(v) => {
-              setHomeShowTeacher(v)
-              toastSwitchLabel('卡片中显示任课教师', v, { remindSave: true })
-            }}
+            onCheckedChange={setHomeShowTeacher}
             disabled={!inClassOnHome}
           />
         </div>
@@ -1119,5 +1187,14 @@ export function ScheduleManager() {
         </DialogContent>
       </Dialog>
     </div>
+    <UnsavedChangesBar
+      open={scheduleDirty}
+      saving={saving}
+      onSave={save}
+      onRevert={revertUnsavedSchedule}
+      saveLabel="保存到站点配置"
+      revertLabel="撤销"
+    />
+    </>
   )
 }
