@@ -36,6 +36,25 @@ export function loadEnvFile(envPath) {
   }
 }
 
+/**
+ * When `sslmode=require` is present, also ensure `uselibpqcompat=true` is set.
+ * This makes pg adopt libpq-compatible SSL semantics and suppresses the
+ * pg SSL-mode security warning introduced in pg-connection-string v3.
+ */
+export function ensureLibpqCompat(url) {
+  if (!url) return url
+  try {
+    const u = new URL(url)
+    if (u.searchParams.get('sslmode') === 'require' && !u.searchParams.has('uselibpqcompat')) {
+      u.searchParams.set('uselibpqcompat', 'true')
+    }
+    return u.toString()
+  } catch {
+    // Not a parseable URL — return as-is
+    return url
+  }
+}
+
 export function isPostgresUrl(s) {
   const t = typeof s === 'string' ? s.trim() : ''
   return t.length > 0 && /^postgres(ql)?:\/\//i.test(t)
@@ -64,7 +83,7 @@ export function pickPostgresUrlForInitDb() {
 /**
  * Loads .env then .env.local (same order as Next). Mutates process.env.DATABASE_URL when using PG.
  * @param {{ forInitDb?: boolean, forceProvider?: 'sqlite' | 'postgresql' }} [options]
- * @returns {{ drizzleConfig: string, provider: string }}
+ * @returns {{ drizzleConfig: string, provider: string, onVercel: boolean }}
  */
 export function resolveDatabaseEnv(options = {}) {
   const forInitDb = options.forInitDb === true
@@ -73,10 +92,13 @@ export function resolveDatabaseEnv(options = {}) {
   loadEnvFile(path.join(repoRoot, '.env'))
   loadEnvFile(path.join(repoRoot, '.env.local'))
 
+  // Vercel injects VERCEL=1 automatically; always use PostgreSQL in that environment.
+  const onVercel = process.env.VERCEL === '1'
+
   const inferredPostgres = pick() !== null
   const explicitPostgres = (process.env.DATABASE_PROVIDER || '').toLowerCase() === 'postgresql'
   let provider =
-    inferredPostgres || explicitPostgres
+    onVercel || inferredPostgres || explicitPostgres
       ? 'postgresql'
       : (process.env.DATABASE_PROVIDER || 'sqlite').toLowerCase()
 
@@ -104,8 +126,8 @@ export function resolveDatabaseEnv(options = {}) {
           : 'PostgreSQL: set DATABASE_URL, or POSTGRES_URL (postgres:// or postgresql://...)',
       )
     }
-    process.env.DATABASE_URL = pgUrl
+    process.env.DATABASE_URL = ensureLibpqCompat(pgUrl)
   }
 
-  return { drizzleConfig, provider }
+  return { drizzleConfig, provider, onVercel }
 }

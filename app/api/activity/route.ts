@@ -25,7 +25,7 @@ import { db } from '@/lib/db'
 import { devices, siteConfig, userActivities } from '@/lib/drizzle-schema'
 import { isLockAppReporterProcessName } from '@/lib/lockapp-reporter'
 import { buildDeviceApprovalUrl } from '@/lib/public-request-url'
-import { sqlTimestamp } from '@/lib/sql-timestamp'
+import { sqlDate, sqlTimestamp } from '@/lib/sql-timestamp'
 import { persistMinutesToExpiresAt } from '@/lib/user-activity-persist'
 
 export const dynamic = 'force-dynamic'
@@ -293,7 +293,7 @@ export async function POST(request: NextRequest) {
         [USER_ACTIVITY_DB_SYNCED_METADATA_KEY]: true,
       }
       const now = sqlTimestamp()
-      const expiresAtIso = expiresAt.toISOString()
+      const expiresAtVal = sqlDate(expiresAt)
       await db
         .insert(userActivities)
         .values({
@@ -302,7 +302,7 @@ export async function POST(request: NextRequest) {
           processName: process_name,
           processTitle: process_title,
           metadata: finalMetadata,
-          expiresAt: expiresAtIso,
+          expiresAt: expiresAtVal,
           updatedAt: now,
         })
         .onConflictDoUpdate({
@@ -311,7 +311,7 @@ export async function POST(request: NextRequest) {
             generatedHashKey,
             processTitle: process_title,
             metadata: finalMetadata,
-            expiresAt: expiresAtIso,
+            expiresAt: expiresAtVal,
             updatedAt: now,
           },
         })
