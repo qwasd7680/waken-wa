@@ -160,6 +160,10 @@ export const siteConfig = sqliteTable('site_config', {
   })
     .notNull()
     .default(false),
+  // Nullable on purpose: safe db:push on existing rows; app treats null as false.
+  globalMouseTiltGyroEnabled: integer('global_mouse_tilt_gyro_enabled', {
+    mode: 'boolean',
+  }).default(false),
   hideActivityMedia: integer('hide_activity_media', { mode: 'boolean' })
     .notNull()
     .default(false),

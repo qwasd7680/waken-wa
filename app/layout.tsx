@@ -29,17 +29,21 @@ export default async function RootLayout({
   children: React.ReactNode
 }>) {
   let globalMouseTiltEnabled = false
+  let globalMouseTiltGyroEnabled = false
   try {
     const row = await getSiteConfigMemoryFirst()
     globalMouseTiltEnabled = row?.globalMouseTiltEnabled === true
+    globalMouseTiltGyroEnabled = row?.globalMouseTiltGyroEnabled === true
   } catch {
     // DB not ready during build or first boot
   }
 
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
       <body className={`${notoSansSC.className} antialiased`}>
-        <GlobalMouseTilt enabled={globalMouseTiltEnabled}>{children}</GlobalMouseTilt>
+        <GlobalMouseTilt enabled={globalMouseTiltEnabled} gyroEnabled={globalMouseTiltGyroEnabled}>
+          {children}
+        </GlobalMouseTilt>
         <div id="site-footer-portal" />
       </body>
     </html>

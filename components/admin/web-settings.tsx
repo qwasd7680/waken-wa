@@ -372,6 +372,9 @@ function webPayloadToFormPatch(web: Record<string, unknown>): Partial<SiteConfig
   if ('globalMouseTiltEnabled' in web && typeof web.globalMouseTiltEnabled === 'boolean') {
     patch.globalMouseTiltEnabled = web.globalMouseTiltEnabled
   }
+  if ('globalMouseTiltGyroEnabled' in web && typeof web.globalMouseTiltGyroEnabled === 'boolean') {
+    patch.globalMouseTiltGyroEnabled = web.globalMouseTiltGyroEnabled
+  }
   if ('hideActivityMedia' in web && typeof web.hideActivityMedia === 'boolean') {
     patch.hideActivityMedia = web.hideActivityMedia
   }
@@ -443,6 +446,7 @@ interface SiteConfig {
   scheduleHomeShowNextUpcoming: boolean
   scheduleHomeAfterClassesLabel: string
   globalMouseTiltEnabled: boolean
+  globalMouseTiltGyroEnabled: boolean
   hideActivityMedia: boolean
   /**
    * When true, POST /api/activity rejects reports whose process_name is the LockApp reporter (basename lockapp / lockapp.exe).
@@ -535,6 +539,7 @@ export function WebSettings() {
     scheduleHomeShowNextUpcoming: false,
     scheduleHomeAfterClassesLabel: SITE_CONFIG_SCHEDULE_HOME_AFTER_CLASSES_LABEL_DEFAULT,
     globalMouseTiltEnabled: false,
+    globalMouseTiltGyroEnabled: false,
     hideActivityMedia: false,
     activityRejectLockappSleep: false,
     displayTimezone: DEFAULT_TIMEZONE,
@@ -647,6 +652,7 @@ export function WebSettings() {
                   )
                 : SITE_CONFIG_SCHEDULE_HOME_AFTER_CLASSES_LABEL_DEFAULT,
             globalMouseTiltEnabled: data.data.globalMouseTiltEnabled === true,
+            globalMouseTiltGyroEnabled: data.data.globalMouseTiltGyroEnabled === true,
             hideActivityMedia: data.data.hideActivityMedia === true,
             activityRejectLockappSleep: data.data.activityRejectLockappSleep === true,
             displayTimezone: normalizeTimezone(data.data.displayTimezone),
@@ -1217,6 +1223,25 @@ export function WebSettings() {
           className="shrink-0"
         />
       </div>
+
+      {form.globalMouseTiltEnabled ? (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/10 px-4 py-3">
+          <div className="space-y-0.5 min-w-0">
+            <Label htmlFor="global-mouse-tilt-gyro" className="font-normal cursor-pointer">
+              支持检测陀螺仪晃动
+            </Label>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              开启后在支持的移动设备上使用陀螺仪/设备方向驱动页面倾斜（可能需要系统权限）；不支持或未授权时会自动回退。
+            </p>
+          </div>
+          <Switch
+            id="global-mouse-tilt-gyro"
+            checked={form.globalMouseTiltGyroEnabled}
+            onCheckedChange={(v) => patch('globalMouseTiltGyroEnabled', v)}
+            className="shrink-0"
+          />
+        </div>
+      ) : null}
 
       <div className="space-y-2">
         <Label>头像地址（URL / DataURL）</Label>

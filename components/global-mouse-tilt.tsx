@@ -11,13 +11,20 @@ const LERP = 0.12
 
 const ADMIN_PREFIX = '/admin'
 
+function clamp(v: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, v))
+}
+
 export function GlobalMouseTilt({
   children,
   enabled,
+  gyroEnabled = false,
 }: {
   children: React.ReactNode
   /** When false, no tilt (default in site config). */
   enabled: boolean
+  /** When true, use device orientation (mobile) when available. */
+  gyroEnabled?: boolean
 }) {
   const pathname = usePathname()
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -57,6 +64,18 @@ export function GlobalMouseTilt({
       targetRef.current.ry = nx * MAX_ROTATE_DEG
     }
 
+    const onOrientation = (e: DeviceOrientationEvent) => {
+      // beta: front-to-back (x axis), gamma: left-to-right (y axis)
+      const beta = typeof e.beta === 'number' ? e.beta : 0
+      const gamma = typeof e.gamma === 'number' ? e.gamma : 0
+
+      // Keep it subtle: map ~[-30,30] deg to [-MAX,MAX]
+      const nx = clamp(gamma / 30, -1, 1)
+      const ny = clamp(beta / 30, -1, 1)
+      targetRef.current.rx = -ny * MAX_ROTATE_DEG
+      targetRef.current.ry = nx * MAX_ROTATE_DEG
+    }
+
     const resetTarget = () => {
       targetRef.current.rx = 0
       targetRef.current.ry = 0
@@ -71,12 +90,80 @@ export function GlobalMouseTilt({
       rafRef.current = requestAnimationFrame(tick)
     }
 
-    window.addEventListener('mousemove', onMove, { passive: true })
+    let detachInput = () => {
+      // no-op
+    }
+
+    const attachMouse = () => {
+      window.addEventListener('mousemove', onMove, { passive: true })
+      detachInput = () => window.removeEventListener('mousemove', onMove)
+    }
+
+    const attachOrientation = () => {
+      window.addEventListener('deviceorientation', onOrientation, { passive: true })
+      detachInput = () => window.removeEventListener('deviceorientation', onOrientation)
+    }
+
+    const maybeRequestIOSPermission = async (): Promise<boolean> => {
+      const AnyDeviceOrientationEvent = (window as Window & {
+        DeviceOrientationEvent?: unknown
+      }).DeviceOrientationEvent as {
+        requestPermission?: () => Promise<'granted' | 'denied'>
+      } | undefined
+      if (!AnyDeviceOrientationEvent) return false
+      if (typeof AnyDeviceOrientationEvent.requestPermission !== 'function') return true
+      try {
+        const res = await AnyDeviceOrientationEvent.requestPermission()
+        return res === 'granted'
+      } catch {
+        return false
+      }
+    }
+
+    const attach = () => {
+      if (!gyroEnabled) {
+        attachMouse()
+        return
+      }
+      if (typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) {
+        attachMouse()
+        return
+      }
+
+      // iOS requires a user gesture to request permission.
+      // We optimistically attach orientation; if iOS blocks it, user gesture handler below will re-attach.
+      attachOrientation()
+    }
+
+    attach()
+
+    let permissionHandled = false
+    const onFirstGesture = async () => {
+      if (permissionHandled) return
+      permissionHandled = true
+
+      if (!gyroEnabled) return
+
+      const ok = await maybeRequestIOSPermission()
+      detachInput()
+      if (ok) {
+        attachOrientation()
+      } else {
+        // Silent fallback
+        attachMouse()
+      }
+    }
+
+    window.addEventListener('touchstart', onFirstGesture, { passive: true, once: true })
+    window.addEventListener('click', onFirstGesture, { passive: true, once: true })
+
     document.documentElement.addEventListener('mouseleave', resetTarget)
     rafRef.current = requestAnimationFrame(tick)
 
     return () => {
-      window.removeEventListener('mousemove', onMove)
+      detachInput()
+      window.removeEventListener('touchstart', onFirstGesture)
+      window.removeEventListener('click', onFirstGesture)
       document.documentElement.removeEventListener('mouseleave', resetTarget)
       cancelAnimationFrame(rafRef.current)
       el.style.transform = ''
@@ -84,7 +171,7 @@ export function GlobalMouseTilt({
       currentRef.current = { rx: 0, ry: 0 }
       targetRef.current = { rx: 0, ry: 0 }
     }
-  }, [skipAdmin, enabled])
+  }, [skipAdmin, enabled, gyroEnabled])
 
   return (
     <div

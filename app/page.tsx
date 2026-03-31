@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { ActivityFeedProvider } from '@/components/activity-feed-provider'
 import { ContentReadingPanel } from '@/components/content-reading-panel'
 import { CurrentStatus } from '@/components/current-status'
+import { HomeScrollbarHider } from '@/components/home-scrollbar-hider'
 import { InspirationHomeSection } from '@/components/inspiration-home-section'
 import { LayoutFooterPortal } from '@/components/layout-footer-portal'
 import { ScheduleHomeInClassBanner } from '@/components/schedule-home-in-class-banner'
@@ -117,6 +118,7 @@ export default async function Home() {
 
   return (
     <>
+      <HomeScrollbarHider />
       {themeCss && (
         <style
           id="site-theme-override"

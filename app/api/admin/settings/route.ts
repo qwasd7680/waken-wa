@@ -339,6 +339,11 @@ export async function PATCH(request: NextRequest) {
       globalMouseTiltEnabled = Boolean(body.globalMouseTiltEnabled)
     }
 
+    let globalMouseTiltGyroEnabled = existing?.globalMouseTiltGyroEnabled === true
+    if (body.globalMouseTiltGyroEnabled !== undefined && body.globalMouseTiltGyroEnabled !== null) {
+      globalMouseTiltGyroEnabled = Boolean(body.globalMouseTiltGyroEnabled)
+    }
+
     let hideActivityMedia = existing?.hideActivityMedia === true
     if (body.hideActivityMedia !== undefined && body.hideActivityMedia !== null) {
       hideActivityMedia = Boolean(body.hideActivityMedia)
@@ -457,6 +462,7 @@ export async function PATCH(request: NextRequest) {
         scheduleHomeShowNextUpcoming,
         scheduleHomeAfterClassesLabel,
         globalMouseTiltEnabled,
+        globalMouseTiltGyroEnabled,
         hideActivityMedia,
         hcaptchaEnabled,
         hcaptchaSiteKey,
@@ -511,6 +517,7 @@ export async function PATCH(request: NextRequest) {
         scheduleHomeShowNextUpcoming,
         scheduleHomeAfterClassesLabel,
         globalMouseTiltEnabled,
+        globalMouseTiltGyroEnabled,
         hideActivityMedia,
         hcaptchaEnabled,
         hcaptchaSiteKey,
