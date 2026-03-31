@@ -4,6 +4,17 @@ import { Shield, Trash2, User } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -71,7 +82,6 @@ export function AccountSettings() {
       toast.error('至少需要保留一个管理员账户')
       return
     }
-    if (!confirm('确定删除该管理员？此操作不可恢复。')) return
     setDeletingId(id)
     try {
       const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
@@ -195,15 +205,32 @@ export function AccountSettings() {
                     创建于 {new Date(u.createdAt).toLocaleString('zh-CN')}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={deletingId === u.id || admins.length <= 1}
-                  onClick={() => deleteAdmin(u.id)}
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={deletingId === u.id || admins.length <= 1}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>确认删除管理员</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        确定要删除管理员「{u.username}」吗？此操作不可恢复。
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>取消</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => void deleteAdmin(u.id)}>
+                        删除
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             ))
           )}

@@ -478,6 +478,8 @@ export function WebSettings() {
   const [dialogAppRulesOpen, setDialogAppRulesOpen] = useState(false)
   const [dialogAppFilterOpen, setDialogAppFilterOpen] = useState(false)
   const [dialogNameOnlyOpen, setDialogNameOnlyOpen] = useState(false)
+  const [importConfigDialogOpen, setImportConfigDialogOpen] = useState(false)
+  const [importConfigInput, setImportConfigInput] = useState('')
   // 裁剪弹窗状态
   const [cropSourceUrl, setCropSourceUrl] = useState<string | null>(null)
   const [cropDialogOpen, setCropDialogOpen] = useState(false)
@@ -836,13 +838,14 @@ export function WebSettings() {
       const res = await fetch('/api/admin/settings/export')
       const data = await res.json()
       if (!res.ok || !data?.success || !data?.data?.encoded) {
-        window.alert(typeof data?.error === 'string' ? data.error : '导出失败')
+        toast.error(typeof data?.error === 'string' ? data.error : '导出失败')
         return
       }
 
       await navigator.clipboard.writeText(data.data.encoded)
+      toast.success('已复制接入配置到剪贴板')
     } catch {
-      window.alert('复制失败，请重试')
+      toast.error('复制失败，请重试')
     }
   }
 
@@ -853,23 +856,20 @@ export function WebSettings() {
     } catch {
       raw = ''
     }
+    setImportConfigInput(raw)
+    setImportConfigDialogOpen(true)
+  }
+
+  const confirmImportConfig = () => {
+    const raw = importConfigInput.trim()
     if (!raw) {
-      raw = (window.prompt('请粘贴 Base64 接入配置（与「一键复制接入配置」导出格式相同）') ?? '').trim()
-    }
-    if (!raw) {
-      window.alert('未获取到内容')
+      toast.error('请先粘贴 Base64 接入配置')
       return
     }
-    const parsed = parseExportPayload(raw)
+    const compact = raw.replace(/\s+/g, '')
+    const parsed = parseExportPayload(compact)
     if (!parsed) {
-      window.alert('格式无效：请确认是本站「一键复制接入配置」导出的 Base64 全文')
-      return
-    }
-    if (
-      !window.confirm(
-        '将用导入包中的「网页配置」覆盖当前表单（不含页面锁密码、不含 API Token）。确定继续？',
-      )
-    ) {
+      toast.error('格式无效：请确认是本站「一键复制接入配置」导出的 Base64 全文')
       return
     }
     const partial = webPayloadToFormPatch(parsed.web)
@@ -885,6 +885,8 @@ export function WebSettings() {
     setBlacklistListPage(0)
     setWhitelistListPage(0)
     setNameOnlyListPage(0)
+    setImportConfigDialogOpen(false)
+    toast.success('已写入网页配置，请记得保存')
   }
 
   const rulesTotal = form.appMessageRules.length
@@ -2136,10 +2138,43 @@ export function WebSettings() {
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        「一键写入配置」会尝试从剪贴板读取 Base64；若无权限或剪贴板为空，将弹出粘贴框。仅合并导出包中的网页字段到本页表单，不包含
-        Token；写入后请用底部悬浮条保存。
+        「一键写入配置」会尝试从剪贴板读取 Base64，并在弹窗中确认。仅合并导出包中的网页字段到本页表单，不包含 Token；
+        写入后请用底部悬浮条保存。
       </p>
     </div>
+    <Dialog open={importConfigDialogOpen} onOpenChange={setImportConfigDialogOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>导入网页配置</DialogTitle>
+          <DialogDescription>
+            将用导入包中的「网页配置」覆盖当前表单（不含页面锁密码、不含 API Token）。
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor="import-config-input">Base64 接入配置</Label>
+          <Input
+            id="import-config-input"
+            value={importConfigInput}
+            onChange={(e) => setImportConfigInput(e.target.value)}
+            placeholder="粘贴「一键复制接入配置」导出的 Base64 全文"
+            className="font-mono text-xs"
+          />
+          <p className="text-xs text-muted-foreground">导入时会自动忽略空格与换行。</p>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setImportConfigDialogOpen(false)}
+          >
+            取消
+          </Button>
+          <Button type="button" onClick={confirmImportConfig}>
+            导入并覆盖网页配置
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     <UnsavedChangesBar
       open={webSettingsDirty}
       saving={saving}
