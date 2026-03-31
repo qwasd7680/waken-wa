@@ -1,7 +1,5 @@
 'use client'
 
-import { format } from 'date-fns'
-import { zhCN } from 'date-fns/locale'
 import { ImagePlus, Loader2, Trash2 } from 'lucide-react'
 import Image from 'next/image'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -28,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { toastSwitchLabel } from '@/lib/admin-switch-toast'
+import { DEFAULT_TIMEZONE, formatDateTimeShort, normalizeTimezone } from '@/lib/timezone'
 
 interface InspirationEntry {
   id: number
@@ -48,6 +47,7 @@ const INSPIRATION_MAX_OUTPUT_EDGE = 1200
 export function InspirationManager() {
   const [loading, setLoading] = useState(true)
   const [entries, setEntries] = useState<InspirationEntry[]>([])
+  const [displayTimezone, setDisplayTimezone] = useState(DEFAULT_TIMEZONE)
   const [page, setPage] = useState(0)
   const [total, setTotal] = useState(0)
   const [q, setQ] = useState('')
@@ -95,6 +95,7 @@ export function InspirationManager() {
       if (data.success) {
         setEntries(data.data || [])
         setTotal(data.pagination?.total || 0)
+        setDisplayTimezone(normalizeTimezone(data.displayTimezone))
       }
     } catch {
       // ignore
@@ -456,7 +457,7 @@ curl -X POST /api/inspiration/entries \\
                           {entry.title ? entry.title : '（无标题）'}
                         </h4>
                         <span className="text-xs text-muted-foreground">
-                          {format(new Date(entry.createdAt), 'yyyy-MM-dd HH:mm', { locale: zhCN })}
+                          {formatDateTimeShort(entry.createdAt, displayTimezone)}
                         </span>
                       </div>
                       {entry.statusSnapshot ? (

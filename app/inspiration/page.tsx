@@ -2,10 +2,16 @@ import Link from 'next/link'
 
 import { ContentReadingPanel } from '@/components/content-reading-panel'
 import { InspirationArchiveList } from '@/components/inspiration-archive-list'
+import { db } from '@/lib/db'
+import { siteConfig } from '@/lib/drizzle-schema'
+import { normalizeTimezone } from '@/lib/timezone'
 
 export const dynamic = 'force-dynamic'
 
-export default function InspirationArchivePage() {
+export default async function InspirationArchivePage() {
+  const [config] = await db.select().from(siteConfig).limit(1)
+  const displayTimezone = normalizeTimezone((config as { displayTimezone?: unknown } | undefined)?.displayTimezone)
+
   return (
     <main className="min-h-screen relative">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-16 pb-24">
@@ -17,7 +23,7 @@ export default function InspirationArchivePage() {
             </Link>
           </div>
           <p className="text-sm text-muted-foreground">向下滚动自动加载更多</p>
-          <InspirationArchiveList />
+          <InspirationArchiveList displayTimezone={displayTimezone} />
         </ContentReadingPanel>
       </div>
     </main>

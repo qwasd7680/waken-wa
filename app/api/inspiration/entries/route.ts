@@ -9,10 +9,11 @@ import {
 } from '@/lib/admin-list-constants'
 import { getBearerApiTokenRecord, getSession, isSiteLockSatisfied } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { inspirationEntries } from '@/lib/drizzle-schema'
+import { inspirationEntries, siteConfig } from '@/lib/drizzle-schema'
 import { gateInspirationApiForDevice } from '@/lib/inspiration-device-allowlist'
 import { linkInspirationAssetsToEntry, validateInlineImageDataUrl } from '@/lib/inspiration-inline-images'
 import { sqlTimestamp } from '@/lib/sql-timestamp'
+import { normalizeTimezone } from '@/lib/timezone'
 
 function formatStatusSnapshotFromFeed(feed: Awaited<ReturnType<typeof getActivityFeedData>>): string | null {
   const lines = feed.activeStatuses
@@ -59,14 +60,17 @@ export async function GET(request: NextRequest) {
     const listBase = db.select().from(inspirationEntries).orderBy(desc(inspirationEntries.createdAt))
     const countBase = db.select({ c: count() }).from(inspirationEntries)
 
-    const [items, [totalRow]] = await Promise.all([
+    const [items, [totalRow], [config]] = await Promise.all([
       (searchCond ? listBase.where(searchCond) : listBase).limit(limit).offset(offset),
       searchCond ? countBase.where(searchCond) : countBase,
+      db.select({ displayTimezone: siteConfig.displayTimezone }).from(siteConfig).limit(1),
     ])
+    const displayTimezone = normalizeTimezone(config?.displayTimezone)
 
     return NextResponse.json({
       success: true,
       data: items,
+      displayTimezone,
       pagination: { limit, offset, total: Number(totalRow?.c ?? 0) },
     })
   } catch (error) {

@@ -110,13 +110,10 @@ chmod +x deploy-build-from-source.sh   # Unix 首次需要
 
 ### 3.Vercel
 
-> 并不推荐 Vercel 部署，因为需要使用 PostgresSQL (SupaBase / Neon)，且开销较高 (SSE 长连接 / Realtime POST 多)
-
-> Fluid Provisioned Memory 可能会吃掉 900 GB (1month) （远超 Vercel Hobby上限 (450gh / month) ）
+> 需要使用 PostgresSQL (SupaBase / Neon)，且开销较高 (SSE 长连接 / Realtime POST 多)
 
 > 如需使用请考虑 非 Realtime 模式上传活动，并且在后台启用 Polling （轮询）
 
-> 如果一定需要在 Vercel 上体验到完整服务，**强烈建议配合 Pro 食用**
 
 [![Deploy with Vercel](https://vercel.com/button)](
 https://vercel.com/new/clone?repository-url=https://github.com/MoYoez/waken-wa
@@ -124,7 +121,7 @@ https://vercel.com/new/clone?repository-url=https://github.com/MoYoez/waken-wa
 
 > 第一次部署后不用担心报错，在项目的 "Integrations" 中 通过 "Marketplace"找到 **PostgreSQL** 供应商，Install 后 Connect 到此项目，Redeploy 即可。
 
-> 如果你想用自己的供应商，请在 env 的 DATABASE_URL 中 写入地址即可
+> 如果你想用自己的供应商，请在 env 的 DATABASE_URL 中 写入地址即可，请注意 Vercel 这类 Serverless 平台的URL兼容性，以防止部署失败。
 
 
 ---

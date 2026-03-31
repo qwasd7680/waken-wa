@@ -1,7 +1,5 @@
 'use client'
 
-import { format } from 'date-fns'
-import { zhCN } from 'date-fns/locale'
 import { Loader2 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -9,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { InspirationHomeItem } from '@/components/inspiration-home-section'
 import { inspirationPlainPreview } from '@/lib/inspiration-preview'
+import { formatDateTimeShort, normalizeTimezone } from '@/lib/timezone'
 import { cn } from '@/lib/utils'
 
 const PAGE = 10
@@ -16,12 +15,13 @@ const PAGE = 10
 const cardShell =
   'border border-border rounded-lg shadow-sm bg-card/80 backdrop-blur-sm transition-all hover:shadow-md hover:border-primary/20'
 
-export function InspirationArchiveList() {
+export function InspirationArchiveList({ displayTimezone }: { displayTimezone: string }) {
   const [items, setItems] = useState<InspirationHomeItem[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [initialDone, setInitialDone] = useState(false)
   const [reachedEnd, setReachedEnd] = useState(false)
+  const [activeTimezone, setActiveTimezone] = useState(() => normalizeTimezone(displayTimezone))
 
   const itemsRef = useRef<InspirationHomeItem[]>([])
   const totalRef = useRef(0)
@@ -54,10 +54,13 @@ export function InspirationArchiveList() {
         return
       }
 
+      const normalizedTz = normalizeTimezone(data.displayTimezone ?? activeTimezone)
+      setActiveTimezone(normalizedTz)
       const batch: InspirationHomeItem[] = (data.data || []).map(
         (row: { createdAt: string | Date; [k: string]: unknown }) => ({
           ...row,
           createdAt: typeof row.createdAt === 'string' ? row.createdAt : new Date(row.createdAt).toISOString(),
+          displayTimezone: normalizedTz,
         })
       )
       const nextTotal = data.pagination?.total ?? 0
@@ -79,7 +82,7 @@ export function InspirationArchiveList() {
       setLoading(false)
       setInitialDone(true)
     }
-  }, [])
+  }, [activeTimezone])
 
   useEffect(() => {
     void loadNext()
@@ -153,7 +156,7 @@ export function InspirationArchiveList() {
                     {entry.title?.trim() ? entry.title : '（无标题）'}
                   </Link>
                   <time className="text-[0.65rem] text-muted-foreground tabular-nums shrink-0 leading-none">
-                    {format(new Date(entry.createdAt), 'yyyy-MM-dd HH:mm', { locale: zhCN })}
+                    {formatDateTimeShort(entry.createdAt, entry.displayTimezone ?? activeTimezone)}
                   </time>
                 </div>
                 <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">{teaser}</p>
