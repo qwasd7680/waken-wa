@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull, lt, or } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
 
 import {
@@ -22,14 +22,18 @@ import {
 import { resolveActiveApiTokenFromPlainSecret } from '@/lib/api-token-secret'
 import { getSession, isSiteLockSatisfied } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { devices, siteConfig, userActivities } from '@/lib/drizzle-schema'
+import { clearDeviceAuthCache } from '@/lib/device-auth-cache'
+import { devices, userActivities } from '@/lib/drizzle-schema'
 import { isLockAppReporterProcessName } from '@/lib/lockapp-reporter'
 import { buildDeviceApprovalUrl } from '@/lib/public-request-url'
+import { getSiteConfigMemoryFirst } from '@/lib/site-config-cache'
 import { sqlDate, sqlTimestamp } from '@/lib/sql-timestamp'
 import { persistMinutesToExpiresAt } from '@/lib/user-activity-persist'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+
+const DEVICE_LAST_SEEN_WRITE_THROTTLE_MS = 30_000
 
 async function validateToken(request: NextRequest): Promise<{ id: number } | null> {
   const authHeader = request.headers.get('authorization')
@@ -191,10 +195,12 @@ export async function POST(request: NextRequest) {
       .from(devices)
       .where(eq(devices.generatedHashKey, generatedHashKey))
       .limit(1)
+    const reportAtMs = Date.now()
+
+    const siteCfg = await getSiteConfigMemoryFirst()
 
     if (!deviceRecord) {
-      const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
-      const autoAccept = Boolean(config?.autoAcceptNewDevices)
+      const autoAccept = Boolean(siteCfg?.autoAcceptNewDevices)
       const createdStatus = autoAccept ? 'active' : 'pending'
       const now = sqlTimestamp()
       const [created] = await db
@@ -209,6 +215,7 @@ export async function POST(request: NextRequest) {
         })
         .returning()
       deviceRecord = created!
+      clearDeviceAuthCache()
 
       if (!autoAccept) {
         const approvalUrl = buildDeviceApprovalUrl(request, generatedHashKey)
@@ -260,13 +267,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const [lockappCfg] = await db
-      .select({ activityRejectLockappSleep: siteConfig.activityRejectLockappSleep })
-      .from(siteConfig)
-      .where(eq(siteConfig.id, 1))
-      .limit(1)
     if (
-      lockappCfg?.activityRejectLockappSleep === true &&
+      siteCfg?.activityRejectLockappSleep === true &&
       isLockAppReporterProcessName(process_name)
     ) {
       return NextResponse.json(
@@ -336,7 +338,8 @@ export async function POST(request: NextRequest) {
       metadata: finalMetadata,
     })
 
-    const seenAt = sqlTimestamp()
+    const seenAt = sqlDate(new Date(reportAtMs))
+    const lastSeenCutoff = sqlDate(new Date(reportAtMs - DEVICE_LAST_SEEN_WRITE_THROTTLE_MS))
     await db
       .update(devices)
       .set({
@@ -344,7 +347,12 @@ export async function POST(request: NextRequest) {
         lastSeenAt: seenAt,
         updatedAt: seenAt,
       })
-      .where(eq(devices.id, deviceRecord.id))
+      .where(
+        and(
+          eq(devices.id, deviceRecord.id),
+          or(isNull(devices.lastSeenAt), lt(devices.lastSeenAt, lastSeenCutoff)),
+        ),
+      )
 
     return NextResponse.json({
       success: true,

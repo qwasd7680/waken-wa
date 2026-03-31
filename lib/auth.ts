@@ -7,7 +7,8 @@ import { cookies } from 'next/headers'
 
 import { findActiveApiTokenBySecret, resolveActiveApiTokenFromPlainSecret } from '@/lib/api-token-secret'
 import { db } from '@/lib/db'
-import { adminUsers, siteConfig, systemSecrets } from '@/lib/drizzle-schema'
+import { adminUsers, systemSecrets } from '@/lib/drizzle-schema'
+import { getSiteConfigMemoryFirst } from '@/lib/site-config-cache'
 import type { SessionPayload } from '@/types/auth'
 
 export type { SessionPayload } from '@/types/auth'
@@ -121,7 +122,7 @@ export async function getSession(): Promise<SessionPayload | null> {
 
 /** Returns true if the visitor has passed the site lock (or lock is disabled). */
 export async function isSiteLockSatisfied(): Promise<boolean> {
-  const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
+  const config = await getSiteConfigMemoryFirst()
   if (!config?.pageLockEnabled) return true
   const cookieStore = await cookies()
   const token = cookieStore.get('site_lock')?.value

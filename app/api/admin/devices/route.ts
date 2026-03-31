@@ -9,6 +9,7 @@ import {
 } from '@/lib/admin-list-constants'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { clearDeviceAuthCache } from '@/lib/device-auth-cache'
 import {
   GENERATED_HASH_KEY_MAX_LENGTH,
   GENERATED_HASH_KEY_MIN_LENGTH,
@@ -190,6 +191,7 @@ export async function POST(request: NextRequest) {
         updatedAt: now,
       })
       .returning()
+    clearDeviceAuthCache()
 
     return NextResponse.json({ success: true, data: item }, { status: 201 })
   } catch (error) {
@@ -251,6 +253,7 @@ export async function PATCH(request: NextRequest) {
       .set(data as Record<string, never>)
       .where(eq(devices.id, id))
       .returning()
+    clearDeviceAuthCache()
 
     return NextResponse.json({ success: true, data: item })
   } catch (error) {
@@ -273,6 +276,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     await db.delete(devices).where(eq(devices.id, id))
+    clearDeviceAuthCache()
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('删除设备失败:', error)

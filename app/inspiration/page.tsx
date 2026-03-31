@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function InspirationArchivePage() {
   const [config] = await db.select().from(siteConfig).limit(1)
-  const displayTimezone = normalizeTimezone((config as { displayTimezone?: unknown } | undefined)?.displayTimezone)
+  const displayTimezone = normalizeTimezone(config?.displayTimezone)
 
   return (
     <main className="min-h-screen relative">

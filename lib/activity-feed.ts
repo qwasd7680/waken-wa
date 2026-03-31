@@ -1,5 +1,3 @@
-import { eq } from 'drizzle-orm'
-
 import {
   ACTIVITY_FEED_DEFAULT_LIMIT,
   ACTIVITY_FEED_QUERY_MAX_LIMIT,
@@ -10,12 +8,11 @@ import {
   getAllActivities,
   redactGeneratedHashKeyForClient,
 } from '@/lib/activity-store'
-import { db } from '@/lib/db'
-import { siteConfig } from '@/lib/drizzle-schema'
 import {
   parseHistoryWindowMinutes,
   parseProcessStaleSeconds,
 } from '@/lib/site-config-constants'
+import { getSiteConfigMemoryFirst } from '@/lib/site-config-cache'
 import { getSteamNowPlayingByDeviceHashes } from '@/lib/steam-feed-merge'
 import {
   hydrateUserActivitiesIntoStoreOnce,
@@ -103,7 +100,7 @@ function applyMessageRule(
 }
 
 export async function getHistoryWindowMinutes(): Promise<number> {
-  const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
+  const config = await getSiteConfigMemoryFirst()
   return parseHistoryWindowMinutes(config?.historyWindowMinutes)
 }
 
@@ -111,7 +108,7 @@ export async function getActivityFeedData(
   limit = ACTIVITY_FEED_DEFAULT_LIMIT,
   options?: GetActivityFeedOptions,
 ): Promise<ActivityFeedData> {
-  const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
+  const config = await getSiteConfigMemoryFirst()
   const historyWindowMinutes = parseHistoryWindowMinutes(config?.historyWindowMinutes)
   const defaultStaleSeconds = parseProcessStaleSeconds(config?.processStaleSeconds)
   const appMessageRules: Array<{ match: string; text: string }> = Array.isArray(config?.appMessageRules)

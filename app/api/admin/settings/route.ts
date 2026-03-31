@@ -1,5 +1,4 @@
 import bcrypt from 'bcryptjs'
-import { eq } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { normalizeActivityUpdateMode } from '@/lib/activity-update-mode'
@@ -38,6 +37,7 @@ import {
 import { normalizeCustomCss } from '@/lib/theme-css'
 import { parseThemeCustomSurface } from '@/lib/theme-custom-surface'
 import { normalizeTimezone } from '@/lib/timezone'
+import { getSiteConfigMemoryFirst } from '@/lib/site-config-cache'
 
 // 强制动态渲染，禁用缓存
 export const dynamic = 'force-dynamic'
@@ -55,7 +55,7 @@ export async function GET() {
   }
 
   try {
-    const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
+    const config = await getSiteConfigMemoryFirst()
     if (!config) {
       return NextResponse.json({ success: true, data: null })
     }
@@ -116,7 +116,7 @@ export async function PATCH(request: NextRequest) {
     const historyWindowMinutes = parseHistoryWindowMinutes(body.historyWindowMinutes)
     const processStaleSeconds = parseProcessStaleSeconds(body.processStaleSeconds)
 
-    const [existing] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
+    const existing = await getSiteConfigMemoryFirst()
 
     let inspirationAllowedDeviceHashes: string[] | null = normalizeInspirationAllowedHashes(
       existing?.inspirationAllowedDeviceHashes ?? null,
@@ -497,7 +497,7 @@ export async function PATCH(request: NextRequest) {
       },
     })
 
-    const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
+    const config = await getSiteConfigMemoryFirst()
     if (!config) {
       return NextResponse.json({ success: false, error: '站点配置不存在' }, { status: 500 })
     }

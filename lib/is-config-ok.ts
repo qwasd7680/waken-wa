@@ -1,7 +1,8 @@
-import { count, eq } from 'drizzle-orm'
+import { count } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
-import { adminUsers, siteConfig } from '@/lib/drizzle-schema'
+import { adminUsers } from '@/lib/drizzle-schema'
+import { getSiteConfigMemoryFirst } from '@/lib/site-config-cache'
 import { SITE_CONFIG_HISTORY_WINDOW_DEFAULT_MINUTES } from '@/lib/site-config-constants'
 import type { SetupInitialConfig } from '@/types/components'
 import type { AdminSetupSnapshot } from '@/types/setup'
@@ -28,9 +29,9 @@ export type { AdminSetupSnapshot } from '@/types/setup'
 
 /** Single DB round-trip for setup page and status checks. */
 export async function getAdminSetupSnapshot(): Promise<AdminSetupSnapshot> {
-  const [[adminCountRow], [row]] = await Promise.all([
+  const [[adminCountRow], row] = await Promise.all([
     db.select({ c: count() }).from(adminUsers),
-    db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1),
+    getSiteConfigMemoryFirst(),
   ])
   const adminCount = Number(adminCountRow?.c ?? 0)
   const hasAdmin = adminCount > 0

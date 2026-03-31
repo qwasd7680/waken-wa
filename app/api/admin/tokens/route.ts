@@ -7,7 +7,8 @@ import {
   ADMIN_API_TOKENS_RECENT_DEVICES_LIMIT,
   ADMIN_LIST_MAX_PAGE_SIZE,
 } from '@/lib/admin-list-constants'
-import { storedFormFromPlainSecret } from '@/lib/api-token-secret'
+import { clearApiTokenAuthCache, storedFormFromPlainSecret } from '@/lib/api-token-secret'
+import { clearDeviceAuthCache } from '@/lib/device-auth-cache'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { apiTokens, devices } from '@/lib/drizzle-schema'
@@ -137,6 +138,7 @@ export async function POST(request: NextRequest) {
       .insert(apiTokens)
       .values({ name, token: storedToken, isActive: true })
       .returning()
+    clearApiTokenAuthCache()
 
     const endpoint = `${getPublicOrigin(request)}/api/activity`
     const tokenBundle = Buffer.from(
@@ -183,6 +185,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     await db.update(apiTokens).set({ isActive: is_active }).where(eq(apiTokens.id, id))
+    clearApiTokenAuthCache()
+    clearDeviceAuthCache()
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -211,6 +215,8 @@ export async function DELETE(request: NextRequest) {
     }
 
     await db.delete(apiTokens).where(eq(apiTokens.id, idNum))
+    clearApiTokenAuthCache()
+    clearDeviceAuthCache()
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { apiTokens, siteConfig } from '@/lib/drizzle-schema'
+import { apiTokens } from '@/lib/drizzle-schema'
 import {
   normalizeHitokotoCategories,
   normalizeHitokotoEncode,
@@ -19,6 +19,7 @@ import {
   SITE_CONFIG_SCHEDULE_HOME_AFTER_CLASSES_LABEL_MAX_LEN,
   SITE_CONFIG_SCHEDULE_SLOT_DEFAULT_MINUTES,
 } from '@/lib/site-config-constants'
+import { getSiteConfigMemoryFirst } from '@/lib/site-config-cache'
 
 async function requireAdmin() {
   const session = await getSession()
@@ -39,8 +40,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [cfgRows, tokens] = await Promise.all([
-      db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1),
+    const [cfg, tokens] = await Promise.all([
+      getSiteConfigMemoryFirst(),
       db
         .select({
           id: apiTokens.id,
@@ -53,7 +54,6 @@ export async function GET(request: Request) {
         .from(apiTokens)
         .orderBy(desc(apiTokens.createdAt)),
     ])
-    const cfg = cfgRows[0]
 
     if (!cfg) {
       return NextResponse.json(

@@ -2,6 +2,11 @@ import { createHash } from 'node:crypto'
 
 import { and, eq } from 'drizzle-orm'
 
+import {
+  clearApiTokenAuthCache,
+  getActiveApiTokenByHashedCached,
+  primeApiTokenAuthCache,
+} from '@/lib/api-token-auth-cache'
 import { db } from '@/lib/db'
 import { apiTokens } from '@/lib/drizzle-schema'
 import { sqlTimestamp } from '@/lib/sql-timestamp'
@@ -35,11 +40,7 @@ export async function findActiveApiTokenBySecret(plainSecret: string) {
 
   const hashedForm = storedFormFromPlainSecret(trimmed)
 
-  const [byHash] = await db
-    .select()
-    .from(apiTokens)
-    .where(and(eq(apiTokens.token, hashedForm), eq(apiTokens.isActive, true)))
-    .limit(1)
+  const byHash = await getActiveApiTokenByHashedCached(hashedForm)
   if (byHash) return byHash
 
   const [legacy] = await db
@@ -52,6 +53,7 @@ export async function findActiveApiTokenBySecret(plainSecret: string) {
   await db.update(apiTokens).set({ token: hashedForm }).where(eq(apiTokens.id, legacy.id))
 
   const [row] = await db.select().from(apiTokens).where(eq(apiTokens.id, legacy.id)).limit(1)
+  primeApiTokenAuthCache(hashedForm, row ?? null)
   return row ?? null
 }
 
@@ -71,3 +73,5 @@ export async function resolveActiveApiTokenFromPlainSecret(
   await touchApiTokenLastUsed(row.id)
   return { id: row.id }
 }
+
+export { clearApiTokenAuthCache }

@@ -20,6 +20,7 @@ import {
 } from '@/lib/activity-store'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { clearDeviceAuthCache } from '@/lib/device-auth-cache'
 import {
   GENERATED_HASH_KEY_MAX_LENGTH,
   WEB_ADMIN_QUICK_ADD_DEVICE_HASH_KEY,
@@ -185,6 +186,7 @@ export async function POST(request: NextRequest) {
           target: devices.generatedHashKey,
           set: { status: 'active', updatedAt: now },
         })
+      clearDeviceAuthCache()
     }
 
     const [deviceRecord] = await db

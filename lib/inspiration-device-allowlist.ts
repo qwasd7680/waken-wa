@@ -1,8 +1,7 @@
-import { and, eq } from 'drizzle-orm'
 import type { NextRequest } from 'next/server'
 
-import { db } from '@/lib/db'
-import { devices, siteConfig } from '@/lib/drizzle-schema'
+import { isActiveDeviceBoundToTokenCached } from '@/lib/device-auth-cache'
+import { getSiteConfigMemoryFirst } from '@/lib/site-config-cache'
 import type { InspirationTokenGateResult } from '@/types/inspiration'
 
 export type { InspirationTokenGateResult } from '@/types/inspiration'
@@ -45,11 +44,7 @@ export async function gateInspirationApiForDevice(
   request: NextRequest,
   body?: Record<string, unknown> | null,
 ): Promise<InspirationTokenGateResult> {
-  const [config] = await db
-    .select({ inspirationAllowedDeviceHashes: siteConfig.inspirationAllowedDeviceHashes })
-    .from(siteConfig)
-    .where(eq(siteConfig.id, 1))
-    .limit(1)
+  const config = await getSiteConfigMemoryFirst()
   const allowlist = normalizeInspirationAllowedHashes(
     config?.inspirationAllowedDeviceHashes ?? null,
   )
@@ -78,18 +73,8 @@ export async function gateInspirationApiForDevice(
     return { ok: false, status: 403, error: '该设备未在「灵感随想录」允许列表中' }
   }
 
-  const [device] = await db
-    .select({ id: devices.id })
-    .from(devices)
-    .where(
-      and(
-        eq(devices.generatedHashKey, key),
-        eq(devices.apiTokenId, tokenId),
-        eq(devices.status, 'active'),
-      ),
-    )
-    .limit(1)
-  if (!device) {
+  const ok = await isActiveDeviceBoundToTokenCached(tokenId, key)
+  if (!ok) {
     return {
       ok: false,
       status: 403,

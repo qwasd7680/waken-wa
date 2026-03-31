@@ -1,4 +1,4 @@
-import { count, desc, eq } from 'drizzle-orm'
+import { count, desc } from 'drizzle-orm'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 
@@ -13,7 +13,7 @@ import { UserProfile, UserProfileNoteSection } from '@/components/user-profile'
 import { normalizeActivityUpdateMode } from '@/lib/activity-update-mode'
 import { verifySiteLockSession } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { inspirationEntries, siteConfig } from '@/lib/drizzle-schema'
+import { inspirationEntries } from '@/lib/drizzle-schema'
 import { getHCaptchaPublicConfig } from '@/lib/hcaptcha'
 import {
   normalizeHitokotoCategories,
@@ -28,6 +28,7 @@ import {
   SITE_CONFIG_SCHEDULE_HOME_AFTER_CLASSES_LABEL_DEFAULT,
   SITE_CONFIG_SCHEDULE_HOME_AFTER_CLASSES_LABEL_MAX_LEN,
 } from '@/lib/site-config-constants'
+import { getSiteConfigMemoryFirst } from '@/lib/site-config-cache'
 import { getThemePresetCss } from '@/lib/theme-css'
 import { normalizeTimezone } from '@/lib/timezone'
 
@@ -35,7 +36,7 @@ import { normalizeTimezone } from '@/lib/timezone'
 export const dynamic = 'force-dynamic'
 
 export default async function Home() {
-  const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
+  const config = await getSiteConfigMemoryFirst()
   if (!config) {
     redirect('/admin/setup')
   }

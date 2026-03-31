@@ -1,4 +1,3 @@
-import { eq } from 'drizzle-orm'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 
@@ -10,7 +9,7 @@ import { getHCaptchaPublicConfig } from '@/lib/hcaptcha'
 import { getThemePresetCss } from '@/lib/theme-css'
 
 export default async function InspirationLayout({ children }: { children: React.ReactNode }) {
-  const [config] = await db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1)
+  const [config] = await db.select().from(siteConfig).limit(1)
   if (!config) {
     redirect('/admin/setup')
   }

@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs'
-import { count, eq } from 'drizzle-orm'
+import { count } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { hashPassword, validatePasswordStrength } from '@/lib/auth'
@@ -8,6 +8,7 @@ import { db, isPostgresDb } from '@/lib/db'
 import { DEFAULT_PAGE_TITLE, PAGE_TITLE_MAX_LEN } from '@/lib/default-page-title'
 import { adminUsers, siteConfig } from '@/lib/drizzle-schema'
 import { safeSiteConfigUpsert } from '@/lib/safe-site-config-upsert'
+import { getSiteConfigMemoryFirst } from '@/lib/site-config-cache'
 import { parseHistoryWindowMinutes, parseProcessStaleSeconds } from '@/lib/site-config-constants'
 import { normalizeCustomCss } from '@/lib/theme-css'
 import { parseThemeCustomSurface } from '@/lib/theme-custom-surface'
@@ -16,10 +17,10 @@ export async function POST(request: NextRequest) {
   try {
     const [countRows, configRows] = await Promise.all([
       db.select({ c: count() }).from(adminUsers),
-      db.select().from(siteConfig).where(eq(siteConfig.id, 1)).limit(1),
+      getSiteConfigMemoryFirst(),
     ])
     const countRow = countRows[0]
-    const existingConfig = configRows[0]
+    const existingConfig = configRows
     const hasAdmin = Number(countRow?.c ?? 0) > 0
 
     if (hasAdmin && existingConfig) {

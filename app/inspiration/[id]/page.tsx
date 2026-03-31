@@ -40,16 +40,13 @@ export default async function InspirationDetailPage({
 
   const [row, config] = await Promise.all([
     db.select().from(inspirationEntries).where(eq(inspirationEntries.id, id)).limit(1),
-    db.select().from(siteConfig).limit(1),
+    db.select({ displayTimezone: siteConfig.displayTimezone }).from(siteConfig).limit(1),
   ])
   const entry = row[0]
-  const settings = config[0]
   if (!entry) notFound()
 
   const createdAt = entry.createdAt instanceof Date ? entry.createdAt.toISOString() : String(entry.createdAt)
-  const displayTimezone = normalizeTimezone(
-    (settings as { displayTimezone?: unknown } | undefined)?.displayTimezone
-  )
+  const displayTimezone = normalizeTimezone(config[0]?.displayTimezone)
 
   return (
     <main className="min-h-screen relative">
