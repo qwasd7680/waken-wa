@@ -100,6 +100,30 @@ chmod +x deploy-build-from-source.sh   # Unix 首次需要
 
 若仅本地开发而非容器，见上文「快速开始」中的 `pnpm dev` / `pnpm build`。
 
+#### 在 Windows 下 部署
+
+你需要的:
+
+- Docker Desktop 或者类 Docker (Podman Desktop) ，支持 Compose 即可
+
+- Git (可选，不过推荐)
+
+Clone 此项目，如果你没有用 Git ，可以使用 “下载Zip”的方式获取项目源代码
+
+在项目中 使用 
+
+> docker compose up -d
+
+即可
+
+如果你需要从源码编译，使用
+
+> docker compose up -d -build
+
+即可
+
+
+
 ---
 
 ### 2. Railway
