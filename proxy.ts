@@ -13,6 +13,14 @@ const RATE_LIMITED_PATHS = new Set([
 
 const ADMIN_API_PREFIX = '/api/admin/'
 const ADMIN_SETUP_PREFIX = '/api/admin/setup'
+const MCP_API_PREFIX = '/api/mcp/'
+
+const MCP_CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id',
+  'Access-Control-Max-Age': '86400',
+}
 
 function getClientIp(request: NextRequest): string {
   return (
@@ -42,6 +50,19 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // MCP endpoints require CORS for browser-based clients (e.g. LobeChat).
+  // Handle preflight here so the response body is never touched.
+  if (pathname.startsWith(MCP_API_PREFIX)) {
+    if (request.method === 'OPTIONS') {
+      return new NextResponse(null, { status: 204, headers: MCP_CORS_HEADERS })
+    }
+    const res = NextResponse.next()
+    for (const [k, v] of Object.entries(MCP_CORS_HEADERS)) {
+      res.headers.set(k, v)
+    }
+    return res
+  }
 
   if (RATE_LIMITED_PATHS.has(pathname) && request.method === 'POST') {
     const ip = getClientIp(request)

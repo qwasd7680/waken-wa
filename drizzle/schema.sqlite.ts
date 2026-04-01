@@ -102,6 +102,8 @@ export const siteConfig = sqliteTable('site_config', {
   themePreset: text('theme_preset').notNull().default('basic'),
   themeCustomSurface: text('theme_custom_surface', { mode: 'json' }),
   customCss: text('custom_css'),
+  // Nullable on purpose: safe db:push on existing rows; tools treat null as disabled.
+  mcpThemeToolsEnabled: integer('mcp_theme_tools_enabled', { mode: 'boolean' }).default(false),
   historyWindowMinutes: integer('history_window_minutes').notNull().default(120),
   appMessageRules: text('app_message_rules', { mode: 'json' }),
   appMessageRulesShowProcessName: integer('app_message_rules_show_process_name', {

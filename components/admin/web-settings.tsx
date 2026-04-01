@@ -569,6 +569,11 @@ interface SiteConfig {
 export function WebSettings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [mcpSaving, setMcpSaving] = useState(false)
+  const [mcpThemeToolsEnabled, setMcpThemeToolsEnabled] = useState(false)
+  const [mcpThemeToolsKeyConfigured, setMcpThemeToolsKeyConfigured] = useState(false)
+  const [mcpThemeToolsGeneratedKey, setMcpThemeToolsGeneratedKey] = useState('')
+  const [publicOrigin, setPublicOrigin] = useState('')
   const [blacklistInput, setBlacklistInput] = useState('')
   const [whitelistInput, setWhitelistInput] = useState('')
   const [nameOnlyListInput, setNameOnlyListInput] = useState('')
@@ -657,10 +662,26 @@ export function WebSettings() {
   })
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setPublicOrigin(window.location.origin)
+    }
+  }, [])
+
+  useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch('/api/admin/settings')
-        const data = await res.json()
+        const [settingsRes, mcpRes] = await Promise.all([
+          fetch('/api/admin/settings'),
+          fetch('/api/admin/mcp/theme-tools'),
+        ])
+        const [data, mcpData] = await Promise.all([settingsRes.json(), mcpRes.json()])
+
+        if (mcpData?.success && mcpData?.data) {
+          setMcpThemeToolsEnabled(mcpData.data.enabled === true)
+          setMcpThemeToolsKeyConfigured(mcpData.data.keyConfigured === true)
+          setMcpThemeToolsGeneratedKey('')
+        }
+
         if (data?.success && data?.data) {
           const rules = Array.isArray(data.data.appMessageRules) ? data.data.appMessageRules : []
           const blacklist = Array.isArray(data.data.appBlacklist)
@@ -789,6 +810,47 @@ export function WebSettings() {
     }
     void load()
   }, [])
+
+  const saveMcpThemeTools = async (nextEnabled: boolean, options?: { rotateKey?: boolean }) => {
+    setMcpSaving(true)
+    try {
+      const payload: Record<string, unknown> = { enabled: nextEnabled }
+      if (options?.rotateKey) {
+        payload.rotateKey = true
+      }
+      const res = await fetch('/api/admin/mcp/theme-tools', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const raw = await res.text()
+      let json: any = null
+      try {
+        json = raw ? JSON.parse(raw) : null
+      } catch {
+        json = null
+      }
+      if (!json?.success) {
+        toast.error(json?.error || `保存失败（HTTP ${res.status}）`)
+        return
+      }
+      setMcpThemeToolsEnabled(json.data?.enabled === true)
+      setMcpThemeToolsKeyConfigured(json.data?.keyConfigured === true)
+      setMcpThemeToolsGeneratedKey(
+        typeof json.data?.generatedKey === 'string' ? json.data.generatedKey : '',
+      )
+      toast.success('已保存 MCP 主题工具设置')
+    } catch (e) {
+      console.error(e)
+      toast.error('保存失败')
+    } finally {
+      setMcpSaving(false)
+    }
+  }
+
+  const mcpKeyPreview = mcpThemeToolsGeneratedKey.trim() || ''
+  const mcpToolBase = publicOrigin || ''
+  const mcpEndpointUrl = mcpToolBase ? `${mcpToolBase}/api/mcp/mcp` : '/api/mcp/mcp'
 
   useEffect(() => {
     if (!form.captureReportedAppsEnabled) {
@@ -1420,6 +1482,84 @@ export function WebSettings() {
             />
             <span className="text-sm">隐藏浮动光斑（更干净的静态渐变背景）</span>
           </Label>
+
+          <div className="mt-2 space-y-3 rounded-lg border border-border/60 bg-background/40 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <Label className="font-normal">MCP：主题工具</Label>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  给 AI 工具调用的主题接口。默认关闭；
+                </p>
+              </div>
+              <Switch
+                checked={mcpThemeToolsEnabled}
+                onCheckedChange={(v) => setMcpThemeToolsEnabled(Boolean(v))}
+                className="shrink-0"
+              />
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+              <div className="space-y-1">
+                <Label>工具 Key（后端生成）</Label>
+                <p className="text-xs text-muted-foreground">
+                  当前状态：{mcpThemeToolsKeyConfigured ? '已配置' : '未配置'}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2 self-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 whitespace-nowrap"
+                  disabled={mcpSaving}
+                  onClick={() => void saveMcpThemeTools(mcpThemeToolsEnabled, { rotateKey: true })}
+                >
+                  {mcpSaving ? '处理中…' : '生成 / 轮换 Key'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 whitespace-nowrap"
+                  disabled={mcpSaving}
+                  onClick={() => void saveMcpThemeTools(mcpThemeToolsEnabled)}
+                >
+                  {mcpSaving ? '保存中…' : '保存开关'}
+                </Button>
+              </div>
+              {mcpThemeToolsGeneratedKey ? (
+                <div className="space-y-1 sm:col-span-2">
+                  <Label>本次生成的 Key（请立即复制）</Label>
+                  <Input value={mcpThemeToolsGeneratedKey} readOnly className="font-mono text-xs" />
+                  <p className="text-[11px] text-muted-foreground">
+                    仅本次显示明文，请复制后妥善保存；后端只存 hash。
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 px-3 py-3">
+              <Label className="text-xs">MCP Endpoint（Streamable HTTP）</Label>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                先保存上面的设置，再把下方地址与 API Key 填入 LobeChat 等工具的 MCP 插件配置中。
+              </p>
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted-foreground">Endpoint URL</p>
+                <Input value={mcpEndpointUrl} readOnly className="font-mono text-xs" />
+              </div>
+              {mcpKeyPreview && (
+                <div className="space-y-1">
+                  <p className="text-[11px] text-muted-foreground">API Key（Bearer Token）</p>
+                  <Input value={mcpKeyPreview} readOnly className="font-mono text-xs" />
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                认证方式：<code className="rounded bg-muted px-1">Authorization: Bearer &lt;API Key&gt;</code>；
+                提供工具：<code className="rounded bg-muted px-1">read_custom_surface</code>（读取全部字段与生成 CSS）、
+                <code className="rounded bg-muted px-1">write_custom_surface</code>（按字段 patch 写入，只传要改的字段）。
+              </p>
+            </div>
+          </div>
         </div>
       ) : null}
 

@@ -106,6 +106,8 @@ export const siteConfig = pgTable('site_config', {
   themePreset: varchar('theme_preset', { length: 50 }).notNull().default('basic'),
   themeCustomSurface: jsonb('theme_custom_surface'),
   customCss: text('custom_css'),
+  // Nullable on purpose: safe db:push on existing rows; tools treat null as disabled.
+  mcpThemeToolsEnabled: boolean('mcp_theme_tools_enabled').default(false),
   historyWindowMinutes: integer('history_window_minutes').notNull().default(120),
   appMessageRules: jsonb('app_message_rules'),
   appMessageRulesShowProcessName: boolean('app_message_rules_show_process_name')
