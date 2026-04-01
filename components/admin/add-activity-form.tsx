@@ -1,13 +1,20 @@
 'use client'
 
-import { Loader2 } from 'lucide-react'
-import { useState } from 'react'
+import { Loader2, Monitor } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   DEVICE_BATTERY_PERCENT_MAX,
   DEVICE_BATTERY_PERCENT_MIN,
@@ -21,7 +28,20 @@ interface AddActivityFormProps {
   onSuccess?: () => void
 }
 
+type DeviceOption = {
+  id: number
+  displayName: string
+  generatedHashKey: string
+  status: string
+}
+
+/** Sentinel value representing the built-in Web quick-add device (empty hash key). */
+const WEB_RESERVED_HASH = '__web_reserved__'
+
 export function AddActivityForm({ onSuccess }: AddActivityFormProps) {
+  const [devices, setDevices] = useState<DeviceOption[]>([])
+  const [selectedHash, setSelectedHash] = useState<string>(WEB_RESERVED_HASH)
+
   const [device, setDevice] = useState('')
   const [processName, setProcessName] = useState('')
   const [processTitle, setProcessTitle] = useState('')
@@ -29,6 +49,41 @@ export function AddActivityForm({ onSuccess }: AddActivityFormProps) {
   const [batteryLevel, setBatteryLevel] = useState('')
   const [isCharging, setIsCharging] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  // Load available active devices for the selector
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch('/api/admin/devices?limit=200')
+        const data = await res.json()
+        if (data?.success && Array.isArray(data.data)) {
+          setDevices(
+            (data.data as Record<string, unknown>[])
+              .filter((d) => d.status === 'active')
+              .map((d) => ({
+                id: Number(d.id),
+                displayName: String(d.displayName ?? ''),
+                generatedHashKey: String(d.generatedHashKey ?? ''),
+                status: String(d.status ?? 'active'),
+              })),
+          )
+        }
+      } catch {
+        // ignore — device list is optional
+      }
+    })()
+  }, [])
+
+  // When a known device is selected, pre-fill the device name field
+  const handleDeviceSelect = (hash: string) => {
+    setSelectedHash(hash)
+    if (hash === WEB_RESERVED_HASH) {
+      setDevice('')
+      return
+    }
+    const found = devices.find((d) => d.generatedHashKey === hash)
+    if (found) setDevice(found.displayName)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,8 +99,10 @@ export function AddActivityForm({ onSuccess }: AddActivityFormProps) {
             )
           : 30
 
+      const resolvedHash = selectedHash === WEB_RESERVED_HASH ? '' : selectedHash
+
       const payload: Record<string, unknown> = {
-        generatedHashKey: '',
+        generatedHashKey: resolvedHash,
         device,
         process_name: processName,
         process_title: processTitle || undefined,
@@ -78,6 +135,7 @@ export function AddActivityForm({ onSuccess }: AddActivityFormProps) {
         setProcessTitle('')
         setBatteryLevel('')
         setIsCharging(false)
+        setSelectedHash(WEB_RESERVED_HASH)
         onSuccess?.()
       } else {
         toast.error(data.error || '添加失败')
@@ -89,14 +147,47 @@ export function AddActivityForm({ onSuccess }: AddActivityFormProps) {
     }
   }
 
+  const isWebReserved = selectedHash === WEB_RESERVED_HASH
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Device selector */}
+      <div className="space-y-2">
+        <Label htmlFor="device-select">归属设备</Label>
+        <Select value={selectedHash} onValueChange={handleDeviceSelect}>
+          <SelectTrigger id="device-select" className="w-full">
+            <SelectValue placeholder="选择设备…" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={WEB_RESERVED_HASH}>
+              <span className="flex items-center gap-2">
+                <Monitor className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                Web（后台快速添加）
+              </span>
+            </SelectItem>
+            {devices.map((d) => (
+              <SelectItem key={d.generatedHashKey} value={d.generatedHashKey}>
+                {d.displayName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {!isWebReserved && (
+          <p className="text-[11px] text-muted-foreground">
+            活动将以所选设备身份上报，设备名称已自动填入，可手动修改。
+          </p>
+        )}
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="device">设备名称</Label>
+          <Label htmlFor="device">
+            设备显示名称
+            {isWebReserved && <span className="ml-1 text-muted-foreground">（可自定义）</span>}
+          </Label>
           <Input
             id="device"
-            placeholder="例如：MacBook Pro"
+            placeholder={isWebReserved ? '例如：MacBook Pro' : '已从设备列表填入，可修改'}
             value={device}
             onChange={(e) => setDevice(e.target.value)}
             required
@@ -144,7 +235,7 @@ export function AddActivityForm({ onSuccess }: AddActivityFormProps) {
             checked={isCharging}
             onCheckedChange={(v) => setIsCharging(v === true)}
           />
-          <Label htmlFor="is-charging" className="text-sm font-normal cursor-pointer">
+          <Label htmlFor="is-charging" className="cursor-pointer text-sm font-normal">
             充电中
           </Label>
         </div>
@@ -161,7 +252,7 @@ export function AddActivityForm({ onSuccess }: AddActivityFormProps) {
           value={persistMinutes}
           onChange={(e) => setPersistMinutes(e.target.value)}
         />
-        <p className="text-xs text-muted-foreground leading-relaxed">
+        <p className="text-xs leading-relaxed text-muted-foreground">
           无客户端上报时，超过该时间后活动会从首页「当前状态」自动结束（1–1440 分钟，与站点「进程无上报判定间隔」规则一致）。
         </p>
       </div>
