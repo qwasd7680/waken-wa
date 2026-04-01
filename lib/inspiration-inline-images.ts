@@ -12,14 +12,18 @@ export const INSPIRATION_IMG_URL_PREFIX = '/api/inspiration/img/'
 const UUID_IN_PATH_RE =
   /\/api\/inspiration\/img\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi
 
-export function extractInspirationImagePublicKeysFromMarkdown(markdown: string): string[] {
+export function extractInspirationImagePublicKeysFromText(input: string): string[] {
   const keys = new Set<string>()
   let m: RegExpExecArray | null
   const re = new RegExp(UUID_IN_PATH_RE.source, 'gi')
-  while ((m = re.exec(markdown)) !== null) {
+  while ((m = re.exec(input)) !== null) {
     keys.add(m[1].toLowerCase())
   }
   return [...keys]
+}
+
+export function extractInspirationImagePublicKeysFromMarkdown(markdown: string): string[] {
+  return extractInspirationImagePublicKeysFromText(markdown)
 }
 
 export function inspirationInlineImageUrl(publicKey: string): string {

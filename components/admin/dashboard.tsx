@@ -7,6 +7,7 @@ import {
   Home,
   Key,
   LayoutDashboard,
+  Link2Off,
   Lightbulb,
   LogOut,
   MonitorSmartphone,
@@ -24,6 +25,7 @@ import { AccountSettings } from './account-settings'
 import { AddActivityForm } from './add-activity-form'
 import { DeviceManager } from './device-manager'
 import { InspirationManager } from './inspiration-manager'
+import { OrphanImages } from './orphan-images'
 import { ScheduleManager } from './schedule-manager'
 import { TokenManager } from './token-manager'
 import { WebSettings } from './web-settings'
@@ -31,6 +33,7 @@ import { WebSettings } from './web-settings'
 const VALID_TABS = new Set([
   'overview',
   'inspiration',
+  'orphan-images',
   'devices',
   'tokens',
   'account',
@@ -97,6 +100,10 @@ export function AdminDashboard({ username, initialTab, initialDeviceHash }: Dash
               <Lightbulb className="h-4 w-4" />
               灵感随想录
             </TabsTrigger>
+            <TabsTrigger value="orphan-images" className="gap-2">
+              <Link2Off className="h-4 w-4" />
+              孤儿图片
+            </TabsTrigger>
             <TabsTrigger value="devices" className="gap-2">
               <MonitorSmartphone className="h-4 w-4" />
               设备管理
@@ -137,6 +144,9 @@ export function AdminDashboard({ username, initialTab, initialDeviceHash }: Dash
           </TabsContent>
           <TabsContent value="inspiration">
             <InspirationManager />
+          </TabsContent>
+          <TabsContent value="orphan-images">
+            <OrphanImages />
           </TabsContent>
 
           <TabsContent value="devices">
