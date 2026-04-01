@@ -9,6 +9,14 @@ import { UnsavedChangesBar } from '@/components/admin/unsaved-changes-bar'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@/components/ui/combobox'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -1218,11 +1226,6 @@ export function WebSettings() {
   return (
     <>
     <div className="rounded-xl border bg-card p-6 space-y-5">
-      <datalist id="history-apps">
-        {historyApps.map((name) => (
-          <option key={name} value={name} />
-        ))}
-      </datalist>
       <h3 className="font-semibold text-foreground">Web 配置</h3>
 
       <div className="space-y-2">
@@ -2100,17 +2103,37 @@ export function WebSettings() {
 
                         <div className="space-y-2">
                           <Label htmlFor={`rule-match-${idx}`}>match（进程/应用名）</Label>
-                          <Input
-                            id={`rule-match-${idx}`}
-                            list={form.captureReportedAppsEnabled ? 'history-apps' : undefined}
-                            value={rule.match}
-                            onChange={(e) => {
+                          <Combobox
+                            items={form.captureReportedAppsEnabled ? historyApps : []}
+                            onInputValueChange={(v) => {
                               const next = [...form.appMessageRules]
-                              next[idx] = { ...next[idx], match: e.target.value }
+                              next[idx] = { ...next[idx], match: v }
                               patch('appMessageRules', next)
                             }}
-                            placeholder="例如：WindowsTerminal.exe"
-                          />
+                            onValueChange={(v) => {
+                              const next = [...form.appMessageRules]
+                              next[idx] = { ...next[idx], match: String(v ?? '') }
+                              patch('appMessageRules', next)
+                            }}
+                          >
+                            <ComboboxInput
+                              id={`rule-match-${idx}`}
+                              placeholder="例如：WindowsTerminal.exe"
+                              showClear={false}
+                            />
+                            <ComboboxContent>
+                              <ComboboxEmpty>
+                                {form.captureReportedAppsEnabled ? '无匹配历史应用' : '未启用历史应用记录'}
+                              </ComboboxEmpty>
+                              <ComboboxList>
+                                {(item) => (
+                                  <ComboboxItem key={item} value={item}>
+                                    {item}
+                                  </ComboboxItem>
+                                )}
+                              </ComboboxList>
+                            </ComboboxContent>
+                          </Combobox>
                         </div>
 
                         <div className="space-y-2">
@@ -2216,14 +2239,25 @@ export function WebSettings() {
             <Label htmlFor="blacklist-input">黑名单应用名</Label>
             <p className="text-xs text-muted-foreground">不区分大小写，每行添加一个应用名。</p>
             <div className="flex flex-wrap items-center gap-2">
-              <Input
-                id="blacklist-input"
-                className="flex-1 min-w-[240px]"
-                list={form.captureReportedAppsEnabled ? 'history-apps' : undefined}
-                value={blacklistInput}
-                onChange={(e) => setBlacklistInput(e.target.value)}
-                placeholder="例如：WeChat.exe"
-              />
+              <Combobox
+                items={form.captureReportedAppsEnabled ? historyApps : []}
+                onInputValueChange={setBlacklistInput}
+                onValueChange={(v) => setBlacklistInput(String(v ?? ''))}
+              >
+                <ComboboxInput id="blacklist-input" placeholder="例如：WeChat.exe" showClear={false} />
+                <ComboboxContent>
+                  <ComboboxEmpty>
+                    {form.captureReportedAppsEnabled ? '无匹配历史应用' : '未启用历史应用记录'}
+                  </ComboboxEmpty>
+                  <ComboboxList>
+                    {(item) => (
+                      <ComboboxItem key={item} value={item}>
+                        {item}
+                      </ComboboxItem>
+                    )}
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
               <Button
                 type="button"
                 className="shrink-0"
@@ -2290,14 +2324,25 @@ export function WebSettings() {
             <Label htmlFor="whitelist-input">白名单应用名</Label>
             <p className="text-xs text-muted-foreground">不区分大小写；仅这些应用会出现在前台。</p>
             <div className="flex flex-wrap items-center gap-2">
-              <Input
-                id="whitelist-input"
-                className="flex-1 min-w-[240px]"
-                list={form.captureReportedAppsEnabled ? 'history-apps' : undefined}
-                value={whitelistInput}
-                onChange={(e) => setWhitelistInput(e.target.value)}
-                placeholder="例如：Code.exe"
-              />
+              <Combobox
+                items={form.captureReportedAppsEnabled ? historyApps : []}
+                onInputValueChange={setWhitelistInput}
+                onValueChange={(v) => setWhitelistInput(String(v ?? ''))}
+              >
+                <ComboboxInput id="whitelist-input" placeholder="例如：Code.exe" showClear={false} />
+                <ComboboxContent>
+                  <ComboboxEmpty>
+                    {form.captureReportedAppsEnabled ? '无匹配历史应用' : '未启用历史应用记录'}
+                  </ComboboxEmpty>
+                  <ComboboxList>
+                    {(item) => (
+                      <ComboboxItem key={item} value={item}>
+                        {item}
+                      </ComboboxItem>
+                    )}
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
               <Button
                 type="button"
                 className="shrink-0"
@@ -2425,13 +2470,28 @@ export function WebSettings() {
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">输入来源值（建议小写）</p>
               <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  id="mediaSource-input"
-                  className="flex-1 min-w-[240px] font-mono text-xs"
-                  value={mediaSourceInput}
-                  onChange={(e) => setMediaSourceInput(e.target.value)}
-                  placeholder="例如：system_media"
-                />
+                <Combobox
+                  items={form.mediaPlaySourceBlocklist}
+                  onInputValueChange={setMediaSourceInput}
+                  onValueChange={(v) => setMediaSourceInput(String(v ?? ''))}
+                >
+                  <ComboboxInput
+                    id="mediaSource-input"
+                    placeholder="例如：system_media"
+                    className="flex-1 min-w-[240px] font-mono text-xs"
+                    showClear={false}
+                  />
+                  <ComboboxContent>
+                    <ComboboxEmpty>无历史条目</ComboboxEmpty>
+                    <ComboboxList>
+                      {(item) => (
+                        <ComboboxItem key={item} value={item}>
+                          {item}
+                        </ComboboxItem>
+                      )}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
                 <Button
                   type="button"
                   className="shrink-0"
@@ -2512,14 +2572,25 @@ export function WebSettings() {
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">输入应用名（不区分大小写）</p>
               <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  id="nameOnly-input"
-                  className="flex-1 min-w-[240px]"
-                  list={form.captureReportedAppsEnabled ? 'history-apps' : undefined}
-                  value={nameOnlyListInput}
-                  onChange={(e) => setNameOnlyListInput(e.target.value)}
-                  placeholder="例如：Code.exe"
-                />
+                <Combobox
+                  items={form.captureReportedAppsEnabled ? historyApps : []}
+                  onInputValueChange={setNameOnlyListInput}
+                  onValueChange={(v) => setNameOnlyListInput(String(v ?? ''))}
+                >
+                  <ComboboxInput id="nameOnly-input" placeholder="例如：Code.exe" showClear={false} />
+                  <ComboboxContent>
+                    <ComboboxEmpty>
+                      {form.captureReportedAppsEnabled ? '无匹配历史应用' : '未启用历史应用记录'}
+                    </ComboboxEmpty>
+                    <ComboboxList>
+                      {(item) => (
+                        <ComboboxItem key={item} value={item}>
+                          {item}
+                        </ComboboxItem>
+                      )}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
                 <Button
                   type="button"
                   className="shrink-0"
