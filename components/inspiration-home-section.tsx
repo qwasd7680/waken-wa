@@ -6,8 +6,13 @@ import Link from 'next/link'
 
 import { MarkdownContent } from '@/components/admin/markdown-content'
 import { FormattedTime } from '@/components/formatted-time'
+import { LexicalContent } from '@/components/lexical-content'
 import { Card } from '@/components/ui/card'
-import { inspirationNeedsFullPage, inspirationPlainPreview } from '@/lib/inspiration-preview'
+import {
+  inspirationLooksLikeMarkdown,
+  inspirationNeedsFullPageAny,
+  inspirationPlainPreviewAny,
+} from '@/lib/inspiration-preview'
 import { cn } from '@/lib/utils'
 import type { InspirationHomeItem } from '@/types/components'
 
@@ -67,11 +72,25 @@ function EntryBody({
           </Link>
         </div>
       ) : (
-        <MarkdownContent
-          markdown={entry.content}
-          className="text-xs text-muted-foreground"
-          imageClassName="max-h-44 w-auto rounded-md border border-border/60 my-2"
-        />
+        <>
+          {entry.contentLexical ? (
+            inspirationLooksLikeMarkdown(entry.content) ? (
+              <MarkdownContent
+                markdown={entry.content}
+                className="text-xs text-muted-foreground"
+                imageClassName="max-h-44 w-auto rounded-md border border-border/60 my-2"
+              />
+            ) : (
+              <LexicalContent content={entry.contentLexical} className="text-xs text-muted-foreground" />
+            )
+          ) : (
+            <MarkdownContent
+              markdown={entry.content}
+              className="text-xs text-muted-foreground"
+              imageClassName="max-h-44 w-auto rounded-md border border-border/60 my-2"
+            />
+          )}
+        </>
       )}
     </div>
   )
@@ -96,8 +115,12 @@ export function InspirationHomeSection({
       <div className="space-y-3">
         {entries.map((entry) => {
           const detailHref = `/inspiration/${entry.id}`
-          const needFull = inspirationNeedsFullPage(entry.content)
-          const { text: previewText } = inspirationPlainPreview(entry.content, PREVIEW_CHARS)
+          const needFull = inspirationNeedsFullPageAny(entry.content, entry.contentLexical, PREVIEW_CHARS)
+          const { text: previewText } = inspirationPlainPreviewAny(
+            entry.content,
+            entry.contentLexical,
+            PREVIEW_CHARS,
+          )
 
           if (entry.imageDataUrl) {
             return (

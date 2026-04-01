@@ -193,6 +193,7 @@ export const inspirationEntries = pgTable('inspiration_entries', {
   id: serial('id').primaryKey(),
   title: varchar('title', { length: 200 }),
   content: text('content').notNull(),
+  contentLexical: text('content_lexical'),
   imageDataUrl: text('image_data_url'),
   statusSnapshot: text('status_snapshot'),
   createdAt: timestamp('created_at', { mode: 'date', withTimezone: true })

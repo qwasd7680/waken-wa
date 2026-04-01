@@ -5,6 +5,7 @@ import { and, inArray, isNull } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
 import { inspirationAssets } from '@/lib/drizzle-schema'
+import { extractInspirationImagePublicKeysFromLexical } from '@/lib/inspiration-lexical'
 
 export const INSPIRATION_IMG_URL_PREFIX = '/api/inspiration/img/'
 
@@ -55,11 +56,16 @@ export function validateInlineImageDataUrl(dataUrl: string): { ok: true } | { ok
 export async function linkInspirationAssetsToEntry(
   entryId: number,
   content: string,
+  contentLexical?: string | null,
 ): Promise<void> {
-  const keys = extractInspirationImagePublicKeysFromMarkdown(content)
-  if (keys.length === 0) return
+  const keys = new Set<string>(extractInspirationImagePublicKeysFromMarkdown(content))
+  for (const key of extractInspirationImagePublicKeysFromLexical(contentLexical)) {
+    keys.add(key)
+  }
+  const mergedKeys = [...keys]
+  if (mergedKeys.length === 0) return
   await db
     .update(inspirationAssets)
     .set({ inspirationEntryId: entryId })
-    .where(and(inArray(inspirationAssets.publicKey, keys), isNull(inspirationAssets.inspirationEntryId)))
+    .where(and(inArray(inspirationAssets.publicKey, mergedKeys), isNull(inspirationAssets.inspirationEntryId)))
 }

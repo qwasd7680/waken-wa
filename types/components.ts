@@ -38,6 +38,7 @@ export type InspirationHomeItem = {
   id: number
   title: string | null
   content: string
+  contentLexical?: string | null
   imageDataUrl: string | null
   statusSnapshot: string | null
   createdAt: string

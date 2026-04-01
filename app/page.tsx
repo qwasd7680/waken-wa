@@ -25,11 +25,11 @@ import {
   resolveSchedulePeriodTemplate,
   type ScheduleCourse,
 } from '@/lib/schedule-courses'
+import { getSiteConfigMemoryFirst } from '@/lib/site-config-cache'
 import {
   SITE_CONFIG_SCHEDULE_HOME_AFTER_CLASSES_LABEL_DEFAULT,
   SITE_CONFIG_SCHEDULE_HOME_AFTER_CLASSES_LABEL_MAX_LEN,
 } from '@/lib/site-config-constants'
-import { getSiteConfigMemoryFirst } from '@/lib/site-config-cache'
 import { getThemePresetCss } from '@/lib/theme-css'
 import { coerceDbTimestampToIsoUtc, normalizeTimezone } from '@/lib/timezone'
 
@@ -72,6 +72,7 @@ export default async function Home() {
         id: inspirationEntries.id,
         title: inspirationEntries.title,
         content: inspirationEntries.content,
+        contentLexical: inspirationEntries.contentLexical,
         imageDataUrl: inspirationEntries.imageDataUrl,
         statusSnapshot: inspirationEntries.statusSnapshot,
         createdAt: inspirationEntries.createdAt,

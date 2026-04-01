@@ -6,7 +6,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ImageCropDialog } from '@/components/admin/image-crop-dialog'
+import { createLexicalTextContent, LexicalEditor } from '@/components/admin/lexical-editor'
 import { MarkdownContent } from '@/components/admin/markdown-content'
+import { LexicalContent } from '@/components/lexical-content'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,18 +22,31 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Textarea } from '@/components/ui/textarea'
-import { toastSwitchLabel } from '@/lib/admin-switch-toast'
+import { appendParagraphTextToLexical, lexicalTextContent } from '@/lib/inspiration-lexical'
+import {
+  inspirationLooksLikeMarkdown,
+  inspirationPlainPreviewAny,
+} from '@/lib/inspiration-preview'
 import { DEFAULT_TIMEZONE, formatDateTimeShort, normalizeTimezone } from '@/lib/timezone'
 
 interface InspirationEntry {
   id: number
   title: string | null
   content: string
+  contentLexical?: string | null
   imageDataUrl: string | null
   statusSnapshot: string | null
   createdAt: string
@@ -43,6 +58,17 @@ const INSPIRATION_LIST_PAGE_SIZE = 8
 const INSPIRATION_LIST_MAX_HEIGHT = 'min(75vh,56rem)'
 /** Max long edge (px) for cropped PNG DataURL (cover + inline body images). */
 const INSPIRATION_MAX_OUTPUT_EDGE = 1200
+/** Local draft storage key for admin inspiration form. */
+const INSPIRATION_DRAFT_STORAGE_KEY = 'waken:admin:inspiration-draft:v1'
+
+type InspirationDraft = {
+  title: string
+  content: string
+  contentLexical: string
+  imageDataUrl: string
+  attachCurrentStatus: boolean
+  attachStatusDeviceHashes: string[]
+}
 
 export function InspirationManager() {
   const [loading, setLoading] = useState(true)
@@ -54,15 +80,22 @@ export function InspirationManager() {
 
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
+  const [contentLexical, setContentLexical] = useState(() => createLexicalTextContent(''))
   const [imageDataUrl, setImageDataUrl] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
   const [attachCurrentStatus, setAttachCurrentStatus] = useState(false)
+  const [attachStatusDeviceHashes, setAttachStatusDeviceHashes] = useState<string[]>([])
+  const [inspirationDevices, setInspirationDevices] = useState<
+    Array<{ id: number; displayName: string; generatedHashKey: string; status: string }>
+  >([])
+  const [previewEntry, setPreviewEntry] = useState<InspirationEntry | null>(null)
   const [bodyImageBusy, setBodyImageBusy] = useState(false)
 
   const [cropSourceUrl, setCropSourceUrl] = useState<string | null>(null)
   const [cropDialogOpen, setCropDialogOpen] = useState(false)
   const [cropTarget, setCropTarget] = useState<'cover' | 'body'>('cover')
   const bodyImageInputRef = useRef<HTMLInputElement>(null)
+  const [draftReady, setDraftReady] = useState(false)
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(total / INSPIRATION_LIST_PAGE_SIZE)),
@@ -80,6 +113,73 @@ export function InspirationManager() {
       if (cropSourceUrl) URL.revokeObjectURL(cropSourceUrl)
     }
   }, [cropSourceUrl])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(INSPIRATION_DRAFT_STORAGE_KEY)
+      if (!raw) return
+      const draft = JSON.parse(raw) as Partial<InspirationDraft>
+      const nextTitle = typeof draft.title === 'string' ? draft.title : ''
+      const nextImage = typeof draft.imageDataUrl === 'string' ? draft.imageDataUrl : ''
+      const nextAttach = draft.attachCurrentStatus === true
+      const nextDeviceHashes = Array.isArray(draft.attachStatusDeviceHashes)
+        ? draft.attachStatusDeviceHashes.filter((v): v is string => typeof v === 'string')
+        : []
+      const nextContentLexical =
+        typeof draft.contentLexical === 'string' && draft.contentLexical.trim()
+          ? draft.contentLexical
+          : createLexicalTextContent(typeof draft.content === 'string' ? draft.content : '')
+      const nextContent =
+        typeof draft.content === 'string' ? draft.content : lexicalTextContent(nextContentLexical)
+
+      setTitle(nextTitle)
+      setImageDataUrl(nextImage)
+      setAttachCurrentStatus(nextAttach)
+      setAttachStatusDeviceHashes(nextAttach ? nextDeviceHashes : [])
+      setContentLexical(nextContentLexical)
+      setContent(nextContent)
+    } catch {
+      // Ignore broken local draft payload.
+    } finally {
+      setDraftReady(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!draftReady) return
+
+    const lexicalPlain = lexicalTextContent(contentLexical).trim()
+    const hasDraft =
+      title.trim().length > 0 ||
+      content.trim().length > 0 ||
+      lexicalPlain.length > 0 ||
+      imageDataUrl.trim().length > 0 ||
+      attachCurrentStatus ||
+      attachStatusDeviceHashes.length > 0
+
+    if (!hasDraft) {
+      localStorage.removeItem(INSPIRATION_DRAFT_STORAGE_KEY)
+      return
+    }
+
+    const payload: InspirationDraft = {
+      title,
+      content,
+      contentLexical,
+      imageDataUrl,
+      attachCurrentStatus,
+      attachStatusDeviceHashes,
+    }
+    localStorage.setItem(INSPIRATION_DRAFT_STORAGE_KEY, JSON.stringify(payload))
+  }, [
+    attachCurrentStatus,
+    attachStatusDeviceHashes,
+    content,
+    contentLexical,
+    draftReady,
+    imageDataUrl,
+    title,
+  ])
 
   const fetchEntries = useCallback(async () => {
     setLoading(true)
@@ -105,6 +205,27 @@ export function InspirationManager() {
   }, [page, q])
 
   useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch('/api/admin/devices?limit=200')
+        const data = await res.json()
+        if (data?.success && Array.isArray(data.data)) {
+          setInspirationDevices(
+            data.data.map((row: Record<string, unknown>) => ({
+              id: Number(row.id),
+              displayName: String(row.displayName ?? ''),
+              generatedHashKey: String(row.generatedHashKey ?? ''),
+              status: String(row.status ?? 'active'),
+            })),
+          )
+        }
+      } catch {
+        // ignore
+      }
+    })()
+  }, [])
+
+  useEffect(() => {
     fetchEntries()
   }, [fetchEntries])
 
@@ -128,8 +249,10 @@ export function InspirationManager() {
         body: JSON.stringify({
           title: title.trim() || undefined,
           content: content.trim(),
+          contentLexical,
           imageDataUrl: imageDataUrl.trim() || undefined,
           attachCurrentStatus,
+          attachStatusDeviceHashes,
         }),
       })
 
@@ -141,8 +264,11 @@ export function InspirationManager() {
 
       setTitle('')
       setContent('')
+      setContentLexical(createLexicalTextContent(''))
       setImageDataUrl('')
       setAttachCurrentStatus(false)
+      setAttachStatusDeviceHashes([])
+      localStorage.removeItem(INSPIRATION_DRAFT_STORAGE_KEY)
       toast.success('灵感已提交')
       setPage(0)
       setTimeout(() => void fetchEntries(), 0)
@@ -176,7 +302,7 @@ export function InspirationManager() {
             <div>
               <h3 className="text-lg font-semibold">灵感随想录</h3>
               <p className="text-sm text-muted-foreground">
-                正文支持 Markdown；正文配图经裁剪后上传到服务器。
+                正文使用 Lexical 富文本编辑；正文配图经裁剪后上传到服务器。
               </p>
             </div>
           </div>
@@ -211,24 +337,78 @@ export function InspirationManager() {
             </div>
 
             <div className="flex items-center gap-2">
-              <input
-                id="insp-attach-status"
-                type="checkbox"
-                checked={attachCurrentStatus}
-                onChange={(e) => {
-                  const on = e.target.checked
-                  setAttachCurrentStatus(on)
-                  toastSwitchLabel('附上提交时首页「当前」状态快照', on)
-                }}
-                className="rounded border-input"
-              />
-              <Label htmlFor="insp-attach-status" className="font-normal text-sm cursor-pointer">
-                附上提交时首页「当前」状态快照
-              </Label>
+              <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                <Checkbox
+                  checked={attachCurrentStatus}
+                  onCheckedChange={(v) => {
+                    const on = v === true
+                    setAttachCurrentStatus(on)
+                    if (!on) setAttachStatusDeviceHashes([])
+                  }}
+                />
+                <span>附上提交时首页「当前」状态快照</span>
+              </label>
             </div>
+            {attachCurrentStatus ? (
+              <div className="space-y-2 rounded-md border border-border/60 bg-muted/10 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">可选快照设备（默认全设备）</p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() =>
+                        setAttachStatusDeviceHashes(inspirationDevices.map((d) => d.generatedHashKey))
+                      }
+                    >
+                      全选
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => setAttachStatusDeviceHashes([])}
+                    >
+                      清空
+                    </Button>
+                  </div>
+                </div>
+                <div className="max-h-36 space-y-1 overflow-y-auto pr-1">
+                  {inspirationDevices.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">暂无设备，快照将按全设备生成。</p>
+                  ) : (
+                    inspirationDevices.map((d) => (
+                      <label
+                        key={d.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-muted/30"
+                      >
+                        <Checkbox
+                          checked={attachStatusDeviceHashes.includes(d.generatedHashKey)}
+                          onCheckedChange={(v) => {
+                            const checked = v === true
+                            setAttachStatusDeviceHashes((prev) =>
+                              checked
+                                ? Array.from(new Set([...prev, d.generatedHashKey]))
+                                : prev.filter((k) => k !== d.generatedHashKey),
+                            )
+                          }}
+                        />
+                        <span className="min-w-0 flex-1 truncate">{d.displayName}</span>
+                        {d.status !== 'active' ? (
+                          <span className="text-amber-600">({d.status})</span>
+                        ) : null}
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : null}
 
             <div className="space-y-2">
-              <Label htmlFor="insp-content">正文（Markdown，必填）</Label>
+              <Label htmlFor="insp-content">正文（Lexical，必填）</Label>
               <Tabs defaultValue="edit" className="w-full">
                 <TabsList className="mb-2">
                   <TabsTrigger value="edit">编辑</TabsTrigger>
@@ -259,19 +439,25 @@ export function InspirationManager() {
                     )}
                     插入正文配图
                   </Button>
-                  <Textarea
-                    id="insp-content"
-                    rows={12}
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    placeholder={'支持 Markdown，例如：\n\n## 小标题\n\n- 列表项\n\n**粗体** 与 `代码`'}
-                    className="font-mono text-sm min-h-[220px]"
+                  <LexicalEditor
+                    value={contentLexical}
+                    onChange={(next) => setContentLexical(next)}
+                    onPlainTextChange={(plain) => setContent(plain)}
+                    placeholder="支持基础富文本：加粗、斜体、列表、代码等"
                   />
                 </TabsContent>
                 <TabsContent value="preview" className="mt-0">
                   <div className="rounded-md border border-border bg-muted/20 p-3 min-h-[220px] max-h-[360px] overflow-y-auto">
                     {content.trim() ? (
-                      <MarkdownContent markdown={content} imageClassName="max-h-72 w-auto rounded-md border border-border my-2" />
+                      inspirationLooksLikeMarkdown(content) ? (
+                        <MarkdownContent
+                          markdown={content}
+                          className="text-sm text-muted-foreground"
+                          imageClassName="max-h-72 w-auto rounded-md border border-border my-2"
+                        />
+                      ) : (
+                        <LexicalContent content={contentLexical} className="text-sm text-muted-foreground" />
+                      )
                     ) : (
                       <p className="text-sm text-muted-foreground">暂无内容</p>
                     )}
@@ -320,8 +506,11 @@ export function InspirationManager() {
                 onClick={() => {
                   setTitle('')
                   setContent('')
+                  setContentLexical(createLexicalTextContent(''))
                   setImageDataUrl('')
                   setAttachCurrentStatus(false)
+                  setAttachStatusDeviceHashes([])
+                  localStorage.removeItem(INSPIRATION_DRAFT_STORAGE_KEY)
                 }}
               >
                 清空
@@ -346,7 +535,7 @@ export function InspirationManager() {
         aspectMode="free"
         outputSize={INSPIRATION_MAX_OUTPUT_EDGE}
         title={cropTarget === 'body' ? '裁剪正文配图' : '裁剪封面配图'}
-        description="拖动选区或边角调整范围，滑块缩放图片；确认后导出 PNG。"
+        description="拖动选区或边角调整范围，确认后导出 PNG。"
         onComplete={(dataUrl) => {
           if (cropTarget === 'cover') {
             setImageDataUrl(dataUrl)
@@ -367,9 +556,10 @@ export function InspirationManager() {
                 return
               }
               const url = String(data.data.url)
-              setContent((c) => {
-                const line = c.trim().length > 0 ? '\n\n' : ''
-                return `${c}${line}![](${url})`
+              setContentLexical((prev) => {
+                const next = appendParagraphTextToLexical(prev, `![](${url})`)
+                setContent(lexicalTextContent(next))
+                return next
               })
               toast.success('正文配图已插入')
             } catch {
@@ -385,9 +575,9 @@ export function InspirationManager() {
         <CardHeader>
           <h3 className="text-base font-semibold">API 提交（可从脚本/设备直接上报）</h3>
           <p className="text-sm text-muted-foreground">
-            使用与「活动上报」相同的 `API Token`。字段 `content` 为 Markdown；`imageDataUrl` 为可选封面图
-            DataURL。正文内嵌图请先 `POST /api/inspiration/assets`（JSON 字段 `imageDataUrl`），再在 `content` 里写
-            `![](/api/inspiration/img/…)`（路径取上传接口返回的 `url`）；提交条目后会自动绑定到该条记录。
+            使用与「活动上报」相同的 `API Token`。字段 `contentLexical` 为 Lexical JSON，`content` 可选作为兼容纯文本；
+            `imageDataUrl` 为可选封面图 DataURL。正文内嵌图请先 `POST /api/inspiration/assets`（JSON 字段
+            `imageDataUrl`），再在正文中插入返回 `url`；提交条目后会自动绑定到该条记录。
             若在「网站设置」中开启了「仅允许所选设备提交随想录」，请在两个请求上都加请求头{' '}
             <code className="rounded bg-muted px-1">X-Device-Key: {'<设备身份牌>'}</code>
             （与设备管理中的值一致）。
@@ -406,7 +596,7 @@ curl -X POST /api/inspiration/assets \\
 curl -X POST /api/inspiration/entries \\
   -H "Authorization: Bearer YOUR_TOKEN" \\
   -H "Content-Type: application/json" \\
-  -d '{"title":"可选","content":"![](/api/inspiration/img/<publicKey>)","imageDataUrl":null}'`}
+  -d '{"title":"可选","contentLexical":{"root":{"type":"root","children":[...]}},"imageDataUrl":null}'`}
           </pre>
         </CardContent>
       </Card>
@@ -417,14 +607,14 @@ curl -X POST /api/inspiration/entries \\
           <div className="flex-1 min-w-[220px] space-y-2">
             <Label htmlFor="insp-search">关键字</Label>
             <Input
-            id="insp-search"
-            value={q}
-            onChange={(e) => {
-              setQ(e.target.value)
-              setPage(0)
-            }}
-            placeholder="搜索标题、正文或状态快照"
-          />
+              id="insp-search"
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value)
+                setPage(0)
+              }}
+              placeholder="搜索标题、正文或状态快照"
+            />
           </div>
         </div>
       </div>
@@ -460,18 +650,24 @@ curl -X POST /api/inspiration/entries \\
                           {formatDateTimeShort(entry.createdAt, displayTimezone)}
                         </span>
                       </div>
-                      {entry.statusSnapshot ? (
-                        <div className="mt-2 rounded-md border border-dashed border-border/70 bg-muted/15 px-2 py-1.5 text-xs text-muted-foreground whitespace-pre-wrap max-h-32 overflow-y-auto">
-                          {entry.statusSnapshot}
-                        </div>
-                      ) : null}
-                      <div className="mt-2 max-h-56 overflow-y-auto rounded-md border border-border/60 bg-background/50 p-2">
-                        <MarkdownContent
-                          markdown={entry.content}
-                          className="text-muted-foreground"
-                          imageClassName="max-h-56 w-auto rounded-md border border-border my-2"
-                        />
+                      <div className="mt-2 text-xs text-muted-foreground line-clamp-3 leading-relaxed">
+                        {
+                          inspirationPlainPreviewAny(
+                            entry.content,
+                            entry.contentLexical,
+                            140,
+                          ).text
+                        }
                       </div>
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        className="mt-1 h-auto px-0 text-xs"
+                        onClick={() => setPreviewEntry(entry)}
+                      >
+                        查看更多
+                      </Button>
                     </div>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
@@ -559,6 +755,57 @@ curl -X POST /api/inspiration/entries \\
           ) : null}
         </div>
       ) : null}
+
+      <Dialog open={Boolean(previewEntry)} onOpenChange={(open) => !open && setPreviewEntry(null)}>
+        <DialogContent className="max-w-2xl max-h-[min(90vh,56rem)] overflow-y-auto">
+          {previewEntry?.imageDataUrl ? (
+            <div className="-mx-6 -mt-6 mb-4 overflow-hidden rounded-t-lg border-b border-border/60 bg-muted/20">
+              <Image
+                src={previewEntry.imageDataUrl}
+                alt="preview header image"
+                width={1200}
+                height={800}
+                className="h-auto max-h-[min(42vh,18rem)] w-full object-cover object-center"
+              />
+            </div>
+          ) : null}
+          <DialogHeader>
+            <DialogTitle>{previewEntry?.title?.trim() || '（无标题）'}</DialogTitle>
+            <DialogDescription>
+              {previewEntry
+                ? formatDateTimeShort(previewEntry.createdAt, displayTimezone)
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          {previewEntry?.statusSnapshot ? (
+            <div className="rounded-md border border-dashed border-border/70 bg-muted/15 px-2 py-1.5 text-xs text-muted-foreground whitespace-pre-wrap">
+              {previewEntry.statusSnapshot}
+            </div>
+          ) : null}
+          {previewEntry?.contentLexical ? (
+            inspirationLooksLikeMarkdown(previewEntry.content) ? (
+              <MarkdownContent
+                markdown={previewEntry.content}
+                className="text-sm text-muted-foreground"
+                imageClassName="max-h-56 w-auto rounded-md border border-border my-2"
+              />
+            ) : (
+              <LexicalContent content={previewEntry.contentLexical} className="text-sm text-muted-foreground" />
+            )
+          ) : previewEntry ? (
+            <MarkdownContent
+              markdown={previewEntry.content}
+              className="text-sm text-muted-foreground"
+              imageClassName="max-h-56 w-auto rounded-md border border-border my-2"
+            />
+          ) : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPreviewEntry(null)}>
+              关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -1334,7 +1334,7 @@ export function WebSettings() {
         aspectMode="square"
         outputSize={128}
         title="裁剪头像"
-        description="拖动选区或边角调整范围，滑块缩放图片；确认后生成 128×128 头像。"
+        description="拖动选区或边角调整范围，确认后生成 128×128 头像。"
         onComplete={(dataUrl) => patch('avatarUrl', dataUrl)}
       />
 

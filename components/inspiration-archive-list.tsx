@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { InspirationHomeItem } from '@/components/inspiration-home-section'
-import { inspirationPlainPreview } from '@/lib/inspiration-preview'
+import { inspirationPlainPreviewAny } from '@/lib/inspiration-preview'
 import { formatDateTimeShort, normalizeTimezone } from '@/lib/timezone'
 import { cn } from '@/lib/utils'
 
@@ -125,7 +125,7 @@ export function InspirationArchiveList({ displayTimezone }: { displayTimezone: s
     <div className="space-y-3">
       {items.map((entry) => {
         const href = `/inspiration/${entry.id}`
-        const { text: teaser } = inspirationPlainPreview(entry.content, 160)
+        const { text: teaser } = inspirationPlainPreviewAny(entry.content, entry.contentLexical, 160)
         return (
           <article key={entry.id} className={`${cardShell} p-2.5 sm:p-3`}>
             <div className="flex flex-row gap-2 sm:gap-3 items-stretch">

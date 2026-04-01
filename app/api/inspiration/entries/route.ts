@@ -12,11 +12,18 @@ import { db } from '@/lib/db'
 import { inspirationEntries, siteConfig } from '@/lib/drizzle-schema'
 import { gateInspirationApiForDevice } from '@/lib/inspiration-device-allowlist'
 import { linkInspirationAssetsToEntry, validateInlineImageDataUrl } from '@/lib/inspiration-inline-images'
+import {
+  lexicalHasVisibleText,
+  lexicalTextContent,
+  normalizeLexicalJsonString,
+} from '@/lib/inspiration-lexical'
 import { sqlTimestamp } from '@/lib/sql-timestamp'
 import { normalizeTimezone } from '@/lib/timezone'
 
-function formatStatusSnapshotFromFeed(feed: Awaited<ReturnType<typeof getActivityFeedData>>): string | null {
-  const lines = feed.activeStatuses
+function formatStatusSnapshotFromStatuses(
+  statuses: Array<{ statusText?: string; processName?: string; processTitle?: string | null }>,
+): string | null {
+  const lines = statuses
     .map((s: { statusText?: string; processName?: string; processTitle?: string | null }) => {
       const st = String(s?.statusText ?? '').trim()
       if (st) return st
@@ -54,6 +61,7 @@ export async function GET(request: NextRequest) {
       or(
         sql`coalesce(lower(${inspirationEntries.title}), '') like lower(${pattern})`,
         sql`lower(${inspirationEntries.content}) like lower(${pattern})`,
+        sql`coalesce(lower(${inspirationEntries.contentLexical}), '') like lower(${pattern})`,
         sql`coalesce(lower(${inspirationEntries.statusSnapshot}), '') like lower(${pattern})`,
       )
 
@@ -100,6 +108,11 @@ export async function POST(request: NextRequest) {
       }
     }
     const attachCurrentStatus = Boolean(body?.attachCurrentStatus)
+    const attachStatusDeviceHashes = Array.isArray(body?.attachStatusDeviceHashes)
+      ? body.attachStatusDeviceHashes
+          .map((item: unknown) => String(item ?? '').trim().toLowerCase())
+          .filter((item: string) => item.length > 0)
+      : []
 
     if (attachCurrentStatus && !session) {
       return NextResponse.json(
@@ -114,9 +127,14 @@ export async function POST(request: NextRequest) {
     const titleFinal = title && title.length > 0 ? title : null
 
     const contentRaw = body?.content ?? body?.text ?? body?.body
-    const content =
+    const contentLexicalRaw = body?.contentLexical ?? body?.content_lexical
+    const contentLexical = normalizeLexicalJsonString(contentLexicalRaw)
+    const contentMarkdown =
       typeof contentRaw === 'string' ? contentRaw.trim() : ''
-    if (!content) {
+    const contentFromLexical = lexicalTextContent(contentLexical)
+    const content = contentMarkdown || contentFromLexical
+    const hasLexicalContent = lexicalHasVisibleText(contentLexical)
+    if (!content && !hasLexicalContent) {
       return NextResponse.json({ success: false, error: '缺少 content' }, { status: 400 })
     }
 
@@ -135,8 +153,22 @@ export async function POST(request: NextRequest) {
 
     let statusSnapshot: string | null = null
     if (attachCurrentStatus && session) {
-      const feed = await getActivityFeedData(ACTIVITY_FEED_DEFAULT_LIMIT)
-      statusSnapshot = formatStatusSnapshotFromFeed(feed)
+      const feed = await getActivityFeedData(ACTIVITY_FEED_DEFAULT_LIMIT, {
+        includeGeneratedHashKey: attachStatusDeviceHashes.length > 0,
+      })
+      const statuses = attachStatusDeviceHashes.length
+        ? (feed.activeStatuses as Array<{
+            generatedHashKey?: string
+            statusText?: string
+            processName?: string
+            processTitle?: string | null
+          }>).filter((item) =>
+            attachStatusDeviceHashes.includes(
+              String(item.generatedHashKey ?? '').trim().toLowerCase(),
+            ),
+          )
+        : feed.activeStatuses
+      statusSnapshot = formatStatusSnapshotFromStatuses(statuses)
     }
 
     const now = sqlTimestamp()
@@ -145,13 +177,14 @@ export async function POST(request: NextRequest) {
       .values({
         title: titleFinal,
         content,
+        contentLexical,
         imageDataUrl,
         statusSnapshot,
         updatedAt: now,
       })
       .returning()
 
-    await linkInspirationAssetsToEntry(entry!.id, content)
+    await linkInspirationAssetsToEntry(entry!.id, content, contentLexical)
 
     return NextResponse.json({ success: true, data: entry }, { status: 201 })
   } catch (error) {

@@ -213,6 +213,7 @@ export const inspirationEntries = sqliteTable('inspiration_entries', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   title: text('title'),
   content: text('content').notNull(),
+  contentLexical: text('content_lexical'),
   imageDataUrl: text('image_data_url'),
   statusSnapshot: text('status_snapshot'),
   createdAt: ts('created_at'),

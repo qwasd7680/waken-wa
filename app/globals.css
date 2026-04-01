@@ -279,6 +279,44 @@ html.home-scrollbar-hidden body::-webkit-scrollbar {
   }
 }
 
+/* Lexical editor WYSIWYG content styles — mirrors LexicalContent / MarkdownContent */
+.lexical-editor-content h1 {
+  @apply mb-2 mt-3 text-base font-semibold first:mt-0;
+}
+.lexical-editor-content h2 {
+  @apply mb-2 mt-3 text-sm font-semibold first:mt-0;
+}
+.lexical-editor-content h3 {
+  @apply mb-2 mt-3 text-sm font-semibold first:mt-0;
+}
+.lexical-editor-content strong {
+  @apply font-bold;
+}
+.lexical-editor-content em {
+  @apply italic;
+}
+.lexical-editor-content u {
+  @apply underline underline-offset-2;
+}
+.lexical-editor-content s {
+  @apply line-through;
+}
+.lexical-editor-content code {
+  @apply rounded bg-muted/80 px-1 py-0.5 font-mono text-xs;
+}
+.lexical-editor-content blockquote {
+  @apply my-2 border-l-2 border-border pl-3 text-sm text-muted-foreground;
+}
+.lexical-editor-content ul {
+  @apply mb-2 list-disc space-y-0.5 pl-5 text-sm;
+}
+.lexical-editor-content ol {
+  @apply mb-2 list-decimal space-y-0.5 pl-5 text-sm;
+}
+.lexical-editor-content p {
+  @apply mb-2 text-sm leading-relaxed last:mb-0;
+}
+
 /* Status marquee animation for overflowing text */
 @keyframes status-marquee {
   0%, 15% {

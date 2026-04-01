@@ -9,13 +9,13 @@ import { clearCachedActivityFeedData, getCachedActivityFeedData, setCachedActivi
 import { redactGeneratedHashKeyForClient } from '@/lib/activity-store'
 import { db } from '@/lib/db'
 import { devices, userActivities } from '@/lib/drizzle-schema'
+import { listRealtimeActivities } from '@/lib/realtime-activity-cache'
+import { getSiteConfigMemoryFirst } from '@/lib/site-config-cache'
 import {
   parseHistoryWindowMinutes,
   parseProcessStaleSeconds,
 } from '@/lib/site-config-constants'
-import { getSiteConfigMemoryFirst } from '@/lib/site-config-cache'
 import { sqlDate, sqlTimestamp } from '@/lib/sql-timestamp'
-import { listRealtimeActivities } from '@/lib/realtime-activity-cache'
 import { getSteamNowPlayingByDeviceHashes } from '@/lib/steam-feed-merge'
 import { purgeExpiredUserActivitiesFromDbAndMemory } from '@/lib/user-activity-hydration'
 import type { ActivityFeedData, ActivityFeedItem } from '@/types/activity'
@@ -82,6 +82,8 @@ export type GetActivityFeedOptions = {
    * Public home (REST `?public=1`, SSE) should set this; admin session feed should omit it.
    */
   forPublicFeed?: boolean
+  /** Internal-only: keep generatedHashKey on activeStatuses for server-side filtering. */
+  includeGeneratedHashKey?: boolean
 }
 
 function getPushModeFromMetadata(metadata: unknown): 'realtime' | 'active' {
@@ -122,7 +124,8 @@ export async function getActivityFeedData(
   options?: GetActivityFeedOptions,
 ): Promise<ActivityFeedData> {
   const config = await getSiteConfigMemoryFirst()
-  const cached = await getCachedActivityFeedData()
+  const shouldUseCache = options?.includeGeneratedHashKey !== true
+  const cached = shouldUseCache ? await getCachedActivityFeedData() : null
   if (cached) {
     const hideActivityMedia = config?.hideActivityMedia === true
     if (options?.forPublicFeed && hideActivityMedia) {
@@ -285,7 +288,10 @@ export async function getActivityFeedData(
   for (const { hashKey, row } of activePending) {
     const sp = steamByHash.get(hashKey)
     if (sp) row.steamNowPlaying = sp
-    activeStatuses.push(redactGeneratedHashKeyForClient(row) as unknown as ActivityFeedItem)
+    const item = options?.includeGeneratedHashKey
+      ? (row as unknown as ActivityFeedItem)
+      : (redactGeneratedHashKeyForClient(row) as unknown as ActivityFeedItem)
+    activeStatuses.push(item)
   }
 
   const recentTopApps: ActivityFeedItem[] = []
@@ -323,7 +329,16 @@ export async function getActivityFeedData(
     generatedAt: new Date().toISOString(),
   } as ActivityFeedData
 
-  await setCachedActivityFeedData(data)
+  if (options?.includeGeneratedHashKey) {
+    await setCachedActivityFeedData({
+      ...data,
+      activeStatuses: data.activeStatuses.map((item) =>
+        redactGeneratedHashKeyForClient(item as unknown as Record<string, unknown>),
+      ) as unknown as ActivityFeedItem[],
+    })
+  } else {
+    await setCachedActivityFeedData(data)
+  }
 
   const hideActivityMedia = config?.hideActivityMedia === true
   if (options?.forPublicFeed && hideActivityMedia) {

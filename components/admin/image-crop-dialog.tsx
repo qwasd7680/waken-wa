@@ -20,8 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Slider } from '@/components/ui/slider'
 import type { ImageCropAspectMode, ImageCropDialogProps } from '@/types/components'
 
 export type { ImageCropDialogProps } from '@/types/components'
@@ -77,7 +75,6 @@ export function ImageCropDialog({
   onComplete,
 }: ImageCropDialogProps) {
   const [crop, setCrop] = useState<Crop>()
-  const [zoom, setZoom] = useState(1)
   const [natural, setNatural] = useState({ w: 0, h: 0 })
   const imgRef = useRef<HTMLImageElement>(null)
   const initUrlRef = useRef<string | null>(null)
@@ -88,8 +85,8 @@ export function ImageCropDialog({
     natural.w > 0 && natural.h > 0
       ? Math.min(MAX_VIEW / natural.w, MAX_VIEW / natural.h)
       : 1
-  const dispW = Math.max(1, Math.round(natural.w * baseFit * zoom))
-  const dispH = Math.max(1, Math.round(natural.h * baseFit * zoom))
+  const dispW = Math.max(1, Math.round(natural.w * baseFit))
+  const dispH = Math.max(1, Math.round(natural.h * baseFit))
 
   const initCropForImage = useCallback(
     (img: HTMLImageElement) => {
@@ -134,7 +131,6 @@ export function ImageCropDialog({
       initUrlRef.current = null
       setCrop(undefined)
       setNatural({ w: 0, h: 0 })
-      setZoom(1)
     }
     onOpenChange(next)
   }
@@ -152,9 +148,6 @@ export function ImageCropDialog({
     onComplete(dataUrl)
     handleOpenChange(false)
   }
-
-  const minZoom = 0.25
-  const maxZoom = 3
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -188,17 +181,6 @@ export function ImageCropDialog({
                   className="max-w-none"
                 />
               </ReactCrop>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">缩放</Label>
-              <Slider
-                min={minZoom}
-                max={maxZoom}
-                step={0.02}
-                value={[zoom]}
-                onValueChange={(v) => setZoom(v[0] ?? 1)}
-                className="w-full"
-              />
             </div>
           </div>
         )}

@@ -5,8 +5,10 @@ import { notFound } from 'next/navigation'
 
 import { MarkdownContent } from '@/components/admin/markdown-content'
 import { ContentReadingPanel } from '@/components/content-reading-panel'
+import { LexicalContent } from '@/components/lexical-content'
 import { db } from '@/lib/db'
 import { inspirationEntries, siteConfig } from '@/lib/drizzle-schema'
+import { inspirationLooksLikeMarkdown } from '@/lib/inspiration-preview'
 import { coerceDbTimestampToIsoUtc, formatDateTimeShort, normalizeTimezone } from '@/lib/timezone'
 
 
@@ -89,11 +91,23 @@ export default async function InspirationDetailPage({
             </div>
           ) : null}
 
-          <MarkdownContent
-            markdown={entry.content}
-            className="text-sm text-muted-foreground"
-            imageClassName="max-h-[min(70vh,24rem)] w-auto rounded-md border border-border/60 my-4"
-          />
+          {entry.contentLexical ? (
+            inspirationLooksLikeMarkdown(entry.content) ? (
+              <MarkdownContent
+                markdown={entry.content}
+                className="text-sm text-muted-foreground"
+                imageClassName="max-h-[min(70vh,24rem)] w-auto rounded-md border border-border/60 my-4"
+              />
+            ) : (
+              <LexicalContent content={entry.contentLexical} className="text-sm text-muted-foreground" />
+            )
+          ) : (
+            <MarkdownContent
+              markdown={entry.content}
+              className="text-sm text-muted-foreground"
+              imageClassName="max-h-[min(70vh,24rem)] w-auto rounded-md border border-border/60 my-4"
+            />
+          )}
         </ContentReadingPanel>
       </article>
     </main>

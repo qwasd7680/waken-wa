@@ -39,6 +39,7 @@ export interface ActivityEntry {
 /** Serialized row in public feed / SSE payloads. */
 export interface ActivityFeedItem {
   id: number | string
+  generatedHashKey?: string
   deviceId?: number | null
   device: string
   processName: string
