@@ -3,6 +3,12 @@
 <p align="center">
 <h2 align="center">Waken Wa💫</h2>
   <img src=".github/preview.png" alt="预览" />
+  
+  <p align="center">
+    <img alt="visitors" src="https://visitor-badge.laobi.icu/badge?page_id=MoYoez/waken-wa" />
+    <img alt="License" src="https://img.shields.io/github/license/MoYoez/waken-wa" />
+    <img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/MoYoez/waken-wa/docker-publish.yml" />
+  </p>
 </p>
 
 ✨ 一日一记，一醒一悟。
