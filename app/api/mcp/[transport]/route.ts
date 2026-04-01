@@ -14,6 +14,20 @@ import {
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+const THEME_TOOL_ALLOWED_KEYS = new Set([
+  'background',
+  'bodyBackground',
+  'animatedBg',
+  'primary',
+  'foreground',
+  'card',
+  'border',
+  'mutedForeground',
+  'radius',
+  'hideFloatingOrbs',
+  'transparentAnimatedBg',
+  'customCss',
+])
 
 function resolveSurface(cfg: Awaited<ReturnType<typeof getSiteConfigMemoryFirst>>) {
   const surface = parseThemeCustomSurface(cfg?.themeCustomSurface)
@@ -123,20 +137,36 @@ const mcpHandler = createMcpHandler(
             .describe('Custom CSS injected after the theme preset CSS.'),
         },
       },
-      async ({
-        background,
-        bodyBackground,
-        animatedBg,
-        primary,
-        foreground,
-        card,
-        border,
-        mutedForeground,
-        radius,
-        hideFloatingOrbs,
-        transparentAnimatedBg,
-        customCss,
-      }) => {
+      async (input) => {
+        const payload =
+          input && typeof input === 'object' && !Array.isArray(input)
+            ? (input as Record<string, unknown>)
+            : {}
+        const unknownKeys = Object.keys(payload).filter((key) => !THEME_TOOL_ALLOWED_KEYS.has(key))
+        if (unknownKeys.length > 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error: only theme fields are allowed. Unknown keys: ${unknownKeys.join(', ')}`,
+              },
+            ],
+          }
+        }
+        const {
+          background,
+          bodyBackground,
+          animatedBg,
+          primary,
+          foreground,
+          card,
+          border,
+          mutedForeground,
+          radius,
+          hideFloatingOrbs,
+          transparentAnimatedBg,
+          customCss,
+        } = payload
         const existing = await getSiteConfigMemoryFirst()
         if (!existing) {
           return { content: [{ type: 'text', text: 'Error: site config not found' }] }
@@ -168,6 +198,13 @@ const mcpHandler = createMcpHandler(
           customCss === undefined
             ? String(existing.customCss ?? '')
             : normalizeCustomCss(customCss)
+        const createPayload = {
+          ...existing,
+          id: 1,
+          themePreset: 'customSurface',
+          themeCustomSurface: merged,
+          customCss: nextCss,
+        }
 
         await safeSiteConfigUpsert({
           where: { id: 1 },
@@ -176,12 +213,7 @@ const mcpHandler = createMcpHandler(
             themeCustomSurface: merged,
             customCss: nextCss,
           },
-          create: {
-            id: 1,
-            themePreset: 'customSurface',
-            themeCustomSurface: merged,
-            customCss: nextCss,
-          },
+          create: createPayload,
         })
 
         const cfg = await getSiteConfigMemoryFirst()

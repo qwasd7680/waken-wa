@@ -8,12 +8,28 @@ import { parseThemeCustomSurface } from '@/lib/theme-custom-surface'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+const THEME_CONFIG_ALLOWED_KEYS = new Set(['themeCustomSurface', 'customCss'])
 
 export async function PATCH(request: NextRequest) {
   const guard = await requireMcpThemeToolsEnabledAndKey(request)
   if (!guard.ok) return guard.response
 
-  const body = await request.json().catch(() => ({}))
+  const bodyRaw = await request.json().catch(() => ({}))
+  const body =
+    bodyRaw && typeof bodyRaw === 'object' && !Array.isArray(bodyRaw)
+      ? (bodyRaw as Record<string, unknown>)
+      : {}
+  const unknownKeys = Object.keys(body).filter((key) => !THEME_CONFIG_ALLOWED_KEYS.has(key))
+  if (unknownKeys.length > 0) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `仅允许修改主题字段: ${[...THEME_CONFIG_ALLOWED_KEYS].join(', ')}`,
+        unknownKeys,
+      },
+      { status: 400 },
+    )
+  }
 
   const existing = await getSiteConfigMemoryFirst()
   if (!existing) {
@@ -29,6 +45,13 @@ export async function PATCH(request: NextRequest) {
     body.customCss === undefined
       ? String(existing.customCss ?? '')
       : normalizeCustomCss(body.customCss)
+  const createPayload = {
+    ...existing,
+    id: 1,
+    themePreset: 'customSurface',
+    themeCustomSurface: nextThemeCustomSurface,
+    customCss: nextCustomCss,
+  }
 
   await safeSiteConfigUpsert({
     where: { id: 1 },
@@ -37,12 +60,7 @@ export async function PATCH(request: NextRequest) {
       themeCustomSurface: nextThemeCustomSurface,
       customCss: nextCustomCss,
     },
-    create: {
-      id: 1,
-      themePreset: 'customSurface',
-      themeCustomSurface: nextThemeCustomSurface,
-      customCss: nextCustomCss,
-    },
+    create: createPayload,
   })
 
   const cfg = await getSiteConfigMemoryFirst()
