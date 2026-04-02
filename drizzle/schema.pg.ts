@@ -107,7 +107,13 @@ export const siteConfig = pgTable('site_config', {
   themeCustomSurface: jsonb('theme_custom_surface'),
   customCss: text('custom_css'),
   // Nullable on purpose: safe db:push on existing rows; tools treat null as disabled.
-  mcpThemeToolsEnabled: boolean('mcp_theme_tools_enabled').default(false),
+  mcpThemeToolsEnabled: boolean('mcp_theme_tools_enabled').default(false), // @DEPRECATED
+  // Nullable on purpose: safe db:push on existing rows; app treats null as disabled.
+  skillsDebugEnabled: boolean('skills_debug_enabled').default(false),
+  // Nullable on purpose: safe db:push on existing rows; null = not configured.
+  skillsAuthMode: varchar('skills_auth_mode', { length: 20 }),
+  // Nullable on purpose: safe db:push on existing rows; null = no active OAuth token.
+  skillsOauthExpiresAt: timestamp('skills_oauth_expires_at', { mode: 'date', withTimezone: true }),
   historyWindowMinutes: integer('history_window_minutes').notNull().default(120),
   appMessageRules: jsonb('app_message_rules'),
   appMessageRulesShowProcessName: boolean('app_message_rules_show_process_name')
@@ -198,6 +204,21 @@ export const systemSecrets = pgTable('system_secrets', {
   value: varchar('value', { length: 512 }).notNull(),
 })
 
+export const skillsOauthTokens = pgTable(
+  'skills_oauth_tokens',
+  {
+    id: serial('id').primaryKey(),
+    aiClientId: varchar('ai_client_id', { length: 128 }).notNull(),
+    tokenHash: varchar('token_hash', { length: 512 }).notNull(),
+    expiresAt: timestamp('expires_at', { mode: 'date', withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { mode: 'date', withTimezone: true }),
+    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index('skills_oauth_tokens_ai_client_id_idx').on(t.aiClientId)],
+)
+
 export const rateLimitBackups = pgTable(
   'rate_limit_backups',
   {
@@ -253,6 +274,7 @@ export const pgSchema = {
   siteConfig,
   activityAppHistory,
   systemSecrets,
+  skillsOauthTokens,
   rateLimitBackups,
   inspirationEntries,
   inspirationAssets,

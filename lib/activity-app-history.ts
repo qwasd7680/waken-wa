@@ -4,7 +4,6 @@ import { eq, inArray } from 'drizzle-orm'
 
 import { shouldUseRedisCache } from '@/lib/cache-runtime-toggle'
 import { db } from '@/lib/db'
-import { isPostgresConnectionUrl } from '@/lib/db-env'
 import { activityAppHistory } from '@/lib/drizzle-schema'
 import {
   redisDel,
@@ -14,6 +13,7 @@ import {
   redisSetJson,
 } from '@/lib/redis-client'
 import { getSiteConfigMemoryFirst } from '@/lib/site-config-cache'
+import { toDbJsonValue } from '@/lib/sqlite-json'
 import { sqlDate, sqlTimestamp } from '@/lib/sql-timestamp'
 
 type Platform = 'pc' | 'mobile'
@@ -42,7 +42,6 @@ const MEMORY_FLUSH_INTERVAL_MS = 30_000
 const MEMORY_FLUSH_MAX_ITEMS = 400
 const memoryPending = new Map<string, PendingAppHistory>()
 let memoryFlushTimer: NodeJS.Timeout | null = null
-const usePg = isPostgresConnectionUrl(process.env.DATABASE_URL?.trim())
 
 function normalizeProcessName(raw: string): string {
   return raw.trim().toLowerCase()
@@ -161,7 +160,7 @@ async function writeToDb(
     titles,
     nowIso,
   )
-  const platformBucketsValue = usePg ? merged : JSON.stringify(merged)
+  const platformBucketsValue = toDbJsonValue(merged)
 
   const firstSeenAt = existing?.firstSeenAt ?? now
   const seenCount = (existing?.seenCount ?? 0) + 1
@@ -311,7 +310,7 @@ export async function flushPendingReportedAppHistory(options?: {
       p.titles,
       p.seenAt,
     )
-    const platformBucketsValue = usePg ? merged : JSON.stringify(merged)
+    const platformBucketsValue = toDbJsonValue(merged)
     const firstSeenAt = ex?.firstSeenAt ?? now
     const seenCount = (ex?.seenCount ?? 0) + 1
 

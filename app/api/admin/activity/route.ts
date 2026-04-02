@@ -32,6 +32,7 @@ import {
 import { devices, userActivities } from '@/lib/drizzle-schema'
 import { removeRealtimeActivity, upsertRealtimeActivity } from '@/lib/realtime-activity-cache'
 import { getSiteConfigMemoryFirst } from '@/lib/site-config-cache'
+import { toDbJsonValue } from '@/lib/sqlite-json'
 import { parseProcessStaleSeconds } from '@/lib/site-config-constants'
 import { sqlDate, sqlTimestamp } from '@/lib/sql-timestamp'
 import { USER_ACTIVITY_PERSIST_MAX_SEC, USER_ACTIVITY_PERSIST_MIN_SEC } from '@/lib/user-activity-persist'
@@ -225,7 +226,7 @@ export async function POST(request: NextRequest) {
           generatedHashKey: effectiveHashKey,
           processName: process_name,
           processTitle: process_title,
-          metadata: finalMetadata,
+          metadata: toDbJsonValue(finalMetadata),
           expiresAt: expiresAtVal,
           updatedAt: now,
         })
@@ -234,7 +235,7 @@ export async function POST(request: NextRequest) {
           set: {
             generatedHashKey: effectiveHashKey,
             processTitle: process_title,
-            metadata: finalMetadata,
+            metadata: toDbJsonValue(finalMetadata),
             expiresAt: expiresAtVal,
             updatedAt: now,
           },

@@ -13,14 +13,9 @@ const RATE_LIMITED_PATHS = new Set([
 
 const ADMIN_API_PREFIX = '/api/admin/'
 const ADMIN_SETUP_PREFIX = '/api/admin/setup'
-const MCP_API_PREFIX = '/api/mcp/'
-
-const MCP_CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id',
-  'Access-Control-Max-Age': '86400',
-}
+const SKILLS_HEADER_PREFIX = 'llm-skills-'
+const ADMIN_SKILLS_DIRECT_PATH = '/api/admin/skills/direct'
+const ADMIN_SKILLS_MD_PATH = '/api/admin/skills/md'
 
 function getClientIp(request: NextRequest): string {
   return (
@@ -51,19 +46,6 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // MCP endpoints require CORS for browser-based clients (e.g. LobeChat).
-  // Handle preflight here so the response body is never touched.
-  if (pathname.startsWith(MCP_API_PREFIX)) {
-    if (request.method === 'OPTIONS') {
-      return new NextResponse(null, { status: 204, headers: MCP_CORS_HEADERS })
-    }
-    const res = NextResponse.next()
-    for (const [k, v] of Object.entries(MCP_CORS_HEADERS)) {
-      res.headers.set(k, v)
-    }
-    return res
-  }
-
   if (RATE_LIMITED_PATHS.has(pathname) && request.method === 'POST') {
     const ip = getClientIp(request)
     if (
@@ -84,8 +66,17 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith(ADMIN_API_PREFIX) &&
     !pathname.startsWith(ADMIN_SETUP_PREFIX)
   ) {
+    const isSkillsDirect = pathname === ADMIN_SKILLS_DIRECT_PATH
+    const isSkillsMd = pathname === ADMIN_SKILLS_MD_PATH
+    const hasSkillsHeaders = (() => {
+      for (const [k] of request.headers.entries()) {
+        if (k.toLowerCase().startsWith(SKILLS_HEADER_PREFIX)) return true
+      }
+      return false
+    })()
+
     const sessionCookie = request.cookies.get('session')
-    if (!sessionCookie?.value) {
+    if (!sessionCookie?.value && !hasSkillsHeaders && !isSkillsDirect && !isSkillsMd) {
       return addSecurityHeaders(
         NextResponse.json(
           { success: false, error: '未授权' },

@@ -100,9 +100,9 @@ export function AdminDashboard({ username, initialTab, initialDeviceHash }: Dash
               <Lightbulb className="h-4 w-4" />
               灵感随想录
             </TabsTrigger>
-            <TabsTrigger value="orphan-images" className="gap-2">
-              <Link2Off className="h-4 w-4" />
-              孤儿图片
+            <TabsTrigger value="schedule" className="gap-2">
+              <CalendarDays className="h-4 w-4" />
+              课表
             </TabsTrigger>
             <TabsTrigger value="devices" className="gap-2">
               <MonitorSmartphone className="h-4 w-4" />
@@ -116,9 +116,9 @@ export function AdminDashboard({ username, initialTab, initialDeviceHash }: Dash
               <UserCog className="h-4 w-4" />
               账户
             </TabsTrigger>
-            <TabsTrigger value="schedule" className="gap-2">
-              <CalendarDays className="h-4 w-4" />
-              课表
+            <TabsTrigger value="orphan-images" className="gap-2">
+              <Link2Off className="h-4 w-4" />
+              孤儿图片
             </TabsTrigger>
             <TabsTrigger value="settings" className="gap-2">
               <Settings className="h-4 w-4" />

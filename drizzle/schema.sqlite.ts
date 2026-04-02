@@ -102,8 +102,14 @@ export const siteConfig = sqliteTable('site_config', {
   themePreset: text('theme_preset').notNull().default('basic'),
   themeCustomSurface: text('theme_custom_surface', { mode: 'json' }),
   customCss: text('custom_css'),
-  // Nullable on purpose: safe db:push on existing rows; tools treat null as disabled.
+  // Nullable on purpose: safe db:push on existing rows; tools treat null as disabled. // @DEPRECATED
   mcpThemeToolsEnabled: integer('mcp_theme_tools_enabled', { mode: 'boolean' }).default(false),
+  // Nullable on purpose: safe db:push on existing rows; app treats null as disabled.
+  skillsDebugEnabled: integer('skills_debug_enabled', { mode: 'boolean' }).default(false),
+  // Nullable on purpose: safe db:push on existing rows; null = not configured.
+  skillsAuthMode: text('skills_auth_mode'),
+  // Nullable on purpose: safe db:push on existing rows; null = no active OAuth token.
+  skillsOauthExpiresAt: tsOpt('skills_oauth_expires_at'),
   historyWindowMinutes: integer('history_window_minutes').notNull().default(120),
   appMessageRules: text('app_message_rules', { mode: 'json' }),
   appMessageRulesShowProcessName: integer('app_message_rules_show_process_name', {
@@ -217,6 +223,19 @@ export const systemSecrets = sqliteTable('system_secrets', {
   value: text('value').notNull(),
 })
 
+export const skillsOauthTokens = sqliteTable(
+  'skills_oauth_tokens',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    aiClientId: text('ai_client_id').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: textCol('expires_at', { mode: 'timestamp' }).notNull(),
+    revokedAt: tsOpt('revoked_at'),
+    createdAt: ts('created_at'),
+  },
+  (t) => [index('skills_oauth_tokens_ai_client_id_idx').on(t.aiClientId)],
+)
+
 export const rateLimitBackups = sqliteTable(
   'rate_limit_backups',
   {
@@ -267,6 +286,7 @@ export const sqliteSchema = {
   siteConfig,
   activityAppHistory,
   systemSecrets,
+  skillsOauthTokens,
   rateLimitBackups,
   inspirationEntries,
   inspirationAssets,

@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { siteConfig } from '@/lib/drizzle-schema'
 import { clearSiteConfigCaches } from '@/lib/site-config-cache'
+import { normalizeJsonFieldsForDb } from '@/lib/sqlite-json'
 import { sqlTimestamp } from '@/lib/sql-timestamp'
 
 type SiteConfigUpsertArgs = {
@@ -8,6 +9,20 @@ type SiteConfigUpsertArgs = {
   update: Record<string, unknown>
   create: Record<string, unknown>
 }
+
+const SITE_CONFIG_JSON_FIELDS = [
+  'userNoteHitokotoCategories',
+  'themeCustomSurface',
+  'appMessageRules',
+  'appBlacklist',
+  'appWhitelist',
+  'appNameOnlyList',
+  'mediaPlaySourceBlocklist',
+  'inspirationAllowedDeviceHashes',
+  'schedulePeriodTemplate',
+  'scheduleGridByWeekday',
+  'scheduleCourses',
+] as const
 
 function getSqliteUnknownColumnName(error: unknown): string | null {
   const message = String((error as { message?: unknown })?.message ?? '')
@@ -34,8 +49,14 @@ export async function safeSiteConfigUpsert(
 ) {
   const id = args.where.id
   const now = sqlTimestamp()
-  const update: Record<string, unknown> = { ...args.update, updatedAt: now }
-  const create: Record<string, unknown> = { ...args.create, id, updatedAt: now }
+  const update: Record<string, unknown> = normalizeJsonFieldsForDb(
+    { ...args.update, updatedAt: now },
+    SITE_CONFIG_JSON_FIELDS,
+  )
+  const create: Record<string, unknown> = normalizeJsonFieldsForDb(
+    { ...args.create, id, updatedAt: now },
+    SITE_CONFIG_JSON_FIELDS,
+  )
 
   for (let i = 0; i < 30; i += 1) {
     try {

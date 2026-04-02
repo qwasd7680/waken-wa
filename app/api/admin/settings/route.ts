@@ -7,6 +7,7 @@ import {
 import { clearActivityFeedDataCache } from '@/lib/activity-feed'
 import { normalizeActivityUpdateMode } from '@/lib/activity-update-mode'
 import { getSession } from '@/lib/auth'
+import { requireAdminOrSkills } from '@/lib/skills-auth'
 import {
   isRedisCacheForcedOnServerless,
   mergeRedisCacheAdminFields,
@@ -55,11 +56,10 @@ async function requireAdmin() {
   return session ?? null
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await requireAdmin()
-  if (!session) {
-    return NextResponse.json({ success: false, error: '未授权' }, { status: 401 })
-  }
+  const guard = await requireAdminOrSkills(request, session)
+  if (!guard.ok) return guard.response
 
   try {
     const config = await getSiteConfigMemoryFirst()
@@ -84,12 +84,48 @@ export async function GET() {
 
 export async function PATCH(request: NextRequest) {
   const session = await requireAdmin()
-  if (!session) {
-    return NextResponse.json({ success: false, error: '未授权' }, { status: 401 })
-  }
+  const guard = await requireAdminOrSkills(request, session)
+  if (!guard.ok) return guard.response
 
   try {
     const body = await request.json()
+
+    if (!guard.isAdmin) {
+      const denied = new Set([
+        // Redis config
+        'useNoSqlAsCacheRedis',
+        'redisCacheTtlSeconds',
+        // Status update config
+        'activityUpdateMode',
+        'processStaleSeconds',
+        'historyWindowMinutes',
+        // Steam key
+        'steamApiKey',
+        // Device auto-accept / allowlist
+        'autoAcceptNewDevices',
+        'inspirationAllowedDeviceHashes',
+        // Page lock
+        'pageLockEnabled',
+        'pageLockPassword',
+        // hCaptcha
+        'hcaptchaEnabled',
+        'hcaptchaSiteKey',
+        'hcaptchaSecretKey',
+      ])
+
+      const presentDeniedKeys = Object.keys(body ?? {}).filter((k) => denied.has(k))
+      if (presentDeniedKeys.length > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `该请求包含禁止由 AI Skills 修改的字段: ${presentDeniedKeys.join(', ')}`,
+            deniedKeys: presentDeniedKeys,
+          },
+          { status: 403 },
+        )
+      }
+    }
+
     const pageTitleRaw = String(body.pageTitle ?? '').trim() || DEFAULT_PAGE_TITLE
     const pageTitle = pageTitleRaw.slice(0, PAGE_TITLE_MAX_LEN)
     const userName = String(body.userName ?? '').trim()

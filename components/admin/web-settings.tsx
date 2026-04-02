@@ -578,10 +578,12 @@ interface SiteConfig {
 export function WebSettings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [mcpSaving, setMcpSaving] = useState(false)
-  const [mcpThemeToolsEnabled, setMcpThemeToolsEnabled] = useState(false)
-  const [mcpThemeToolsKeyConfigured, setMcpThemeToolsKeyConfigured] = useState(false)
-  const [mcpThemeToolsGeneratedKey, setMcpThemeToolsGeneratedKey] = useState('')
+  const [skillsSaving, setSkillsSaving] = useState(false)
+  const [skillsEnabled, setSkillsEnabled] = useState(false)
+  const [skillsAuthMode, setSkillsAuthMode] = useState<'oauth' | 'apikey' | ''>('')
+  const [skillsApiKeyConfigured, setSkillsApiKeyConfigured] = useState(false)
+  const [skillsOauthConfigured, setSkillsOauthConfigured] = useState(false)
+  const [skillsGeneratedApiKey, setSkillsGeneratedApiKey] = useState('')
   const [publicOrigin, setPublicOrigin] = useState('')
   const [blacklistInput, setBlacklistInput] = useState('')
   const [whitelistInput, setWhitelistInput] = useState('')
@@ -679,16 +681,22 @@ export function WebSettings() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [settingsRes, mcpRes] = await Promise.all([
+        const [settingsRes, skillsRes] = await Promise.all([
           fetch('/api/admin/settings'),
-          fetch('/api/admin/mcp/theme-tools'),
+          fetch('/api/admin/skills'),
         ])
-        const [data, mcpData] = await Promise.all([settingsRes.json(), mcpRes.json()])
+        const [data, skillsData] = await Promise.all([settingsRes.json(), skillsRes.json()])
 
-        if (mcpData?.success && mcpData?.data) {
-          setMcpThemeToolsEnabled(mcpData.data.enabled === true)
-          setMcpThemeToolsKeyConfigured(mcpData.data.keyConfigured === true)
-          setMcpThemeToolsGeneratedKey('')
+        if (skillsData?.success && skillsData?.data) {
+          setSkillsEnabled(skillsData.data.enabled === true)
+          setSkillsAuthMode(
+            skillsData.data.authMode === 'oauth' || skillsData.data.authMode === 'apikey'
+              ? skillsData.data.authMode
+              : '',
+          )
+          setSkillsApiKeyConfigured(skillsData.data.apiKeyConfigured === true)
+          setSkillsOauthConfigured(skillsData.data.oauthConfigured === true)
+          setSkillsGeneratedApiKey('')
         }
 
         if (data?.success && data?.data) {
@@ -820,46 +828,36 @@ export function WebSettings() {
     void load()
   }, [])
 
-  const saveMcpThemeTools = async (nextEnabled: boolean, options?: { rotateKey?: boolean }) => {
-    setMcpSaving(true)
+  const saveSkillsConfig = async (
+    patch: { enabled?: boolean; authMode?: 'oauth' | 'apikey'; rotateApiKey?: boolean },
+  ) => {
+    setSkillsSaving(true)
     try {
-      const payload: Record<string, unknown> = { enabled: nextEnabled }
-      if (options?.rotateKey) {
-        payload.rotateKey = true
-      }
-      const res = await fetch('/api/admin/mcp/theme-tools', {
+      const res = await fetch('/api/admin/skills', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(patch),
       })
-      const raw = await res.text()
-      let json: any = null
-      try {
-        json = raw ? JSON.parse(raw) : null
-      } catch {
-        json = null
-      }
+      const json = await res.json().catch(() => null)
       if (!json?.success) {
         toast.error(json?.error || `保存失败（HTTP ${res.status}）`)
         return
       }
-      setMcpThemeToolsEnabled(json.data?.enabled === true)
-      setMcpThemeToolsKeyConfigured(json.data?.keyConfigured === true)
-      setMcpThemeToolsGeneratedKey(
-        typeof json.data?.generatedKey === 'string' ? json.data.generatedKey : '',
+      setSkillsEnabled(json.data?.enabled === true)
+      setSkillsAuthMode(
+        json.data?.authMode === 'oauth' || json.data?.authMode === 'apikey' ? json.data.authMode : '',
       )
-      toast.success('已保存 MCP 主题工具设置')
+      setSkillsApiKeyConfigured(json.data?.apiKeyConfigured === true)
+      setSkillsOauthConfigured(json.data?.oauthConfigured === true)
+      setSkillsGeneratedApiKey(typeof json.data?.generatedApiKey === 'string' ? json.data.generatedApiKey : '')
+      toast.success('已保存 Skills 设置')
     } catch (e) {
       console.error(e)
       toast.error('保存失败')
     } finally {
-      setMcpSaving(false)
+      setSkillsSaving(false)
     }
   }
-
-  const mcpKeyPreview = mcpThemeToolsGeneratedKey.trim() || ''
-  const mcpToolBase = publicOrigin || ''
-  const mcpEndpointUrl = mcpToolBase ? `${mcpToolBase}/api/mcp/mcp` : '/api/mcp/mcp'
 
   useEffect(() => {
     if (!form.captureReportedAppsEnabled) {
@@ -1128,6 +1126,15 @@ export function WebSettings() {
     }
   }
 
+  const copyPlainText = async (value: string, successText: string) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      toast.success(successText)
+    } catch {
+      toast.error('复制失败，请重试')
+    }
+  }
+
   const exportUsedAppsJson = async () => {
     try {
       const res = await fetch('/api/admin/activity/apps-export')
@@ -1353,9 +1360,203 @@ export function WebSettings() {
             <Label>后台入口文案</Label>
             <Input value={form.adminText} onChange={(e) => patch('adminText', e.target.value)} />
           </div>
+
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={form.pageLockEnabled}
+                onChange={(e) => patch('pageLockEnabled', e.target.checked)}
+              />
+              启用页面访问密码锁
+            </Label>
+            <Input
+              type="password"
+              placeholder="设置/更新页面访问密码（留空则不修改）"
+              value={form.pageLockPassword}
+              onChange={(e) => patch('pageLockPassword', e.target.value)}
+            />
+          </div>
         </TabsContent>
 
         <TabsContent value="advanced" className="space-y-5">
+      <div className="rounded-lg border border-border/60 bg-muted/10 p-4 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <Label className="font-normal">允许AI使用Skills辅助调试修改</Label>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              启用后，AI 可通过 Skills 通道调用后台接口进行调试修改（请求头统一前缀{' '}
+              <code className="rounded bg-muted px-1">LLM-Skills-</code>）。未配置时 AI 将只返回引导，不会执行写操作。
+            </p>
+          </div>
+          <Switch
+            checked={skillsEnabled}
+            onCheckedChange={(v) => {
+              const next = Boolean(v)
+              setSkillsEnabled(next)
+              void saveSkillsConfig({ enabled: next })
+            }}
+            className="shrink-0"
+          />
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label>认证模式</Label>
+            <Select
+              value={skillsAuthMode || ''}
+              onValueChange={(v) => {
+                const mode = v === 'oauth' || v === 'apikey' ? v : ''
+                setSkillsAuthMode(mode as any)
+                if (mode) void saveSkillsConfig({ authMode: mode })
+              }}
+              disabled={!skillsEnabled}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="选择 OAuth / APIKEY" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="oauth">OAuth 授权链接（默认 1 小时）</SelectItem>
+                <SelectItem value="apikey">APIKEY 认证（默认无限）</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>授权状态</Label>
+            <div className="text-xs text-muted-foreground leading-relaxed rounded-md border border-border/60 bg-background/50 px-3 py-2">
+              {skillsAuthMode === 'oauth' ? (
+                <>
+                  OAuth：{skillsOauthConfigured ? '已授权' : '未授权'}
+                  {' '}· 以 AI 标识维度签发，可并存多个 token
+                </>
+              ) : skillsAuthMode === 'apikey' ? (
+                <>APIKEY：{skillsApiKeyConfigured ? '已配置' : '未配置（请生成/轮换）'}</>
+              ) : (
+                <>未选择认证模式</>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {skillsEnabled && skillsAuthMode === 'apikey' ? (
+          <div className="space-y-3 rounded-md border border-border/60 bg-background/40 px-3 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <Label className="text-sm font-normal">APIKEY</Label>
+                <p className="text-xs text-muted-foreground">
+                  默认无限期；仅本次显示明文，请复制后妥善保存（后端仅存 hash）。
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={skillsSaving}
+                onClick={() => void saveSkillsConfig({ rotateApiKey: true })}
+              >
+                {skillsSaving ? '处理中…' : '生成 / 轮换 Key'}
+              </Button>
+            </div>
+
+            {skillsGeneratedApiKey ? (
+              <div className="space-y-2">
+                <Label className="text-xs">本次生成的 Key（请立即复制）</Label>
+                <Input value={skillsGeneratedApiKey} readOnly className="font-mono text-xs" />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {skillsEnabled && skillsAuthMode === 'oauth' ? (
+          <div className="space-y-2 rounded-md border border-border/60 bg-background/40 px-3 py-3">
+            <Label className="text-sm font-normal">OAuth 授权链接</Label>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              该链接必须携带唯一 AI 标识参数：<code className="rounded bg-muted px-1">?ai=...</code>。AI 发给你后，打开会先弹窗确认；同意后才会签发该 AI 的 token（默认 1 小时，支持同一 AI 多 token 并存）。
+            </p>
+            <Input
+              value={
+                publicOrigin
+                  ? `${publicOrigin}/admin/skills-authorize?ai=<unique-ai-id>`
+                  : '/admin/skills-authorize?ai=<unique-ai-id>'
+              }
+              readOnly
+              className="font-mono text-xs"
+            />
+          </div>
+        ) : null}
+
+        {skillsEnabled && skillsAuthMode ? (
+          <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 px-3 py-3">
+            <Label className="text-xs">第一步：固定技能说明（完整链接）</Label>
+            <div className="flex gap-2">
+              <Input
+                value={
+                  publicOrigin
+                    ? `${publicOrigin}/api/admin/skills/md`
+                    : '/api/admin/skills/md'
+                }
+                readOnly
+                className="font-mono text-xs"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() =>
+                  void copyPlainText(
+                    publicOrigin
+                      ? `${publicOrigin}/api/admin/skills/md`
+                      : '/api/admin/skills/md',
+                    '已复制 skills.md 链接',
+                  )
+                }
+              >
+                一键复制
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              AI 必须先读取该文档，再决定走 OAuth 还是 APIKEY。
+            </p>
+
+            <Label className="text-xs">第二步：Skills 直连链接（验证/指引）</Label>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              该链接用于验证 token 是否可用，并返回 AI 需要的{' '}
+              <code className="rounded bg-muted px-1">LLM-Skills-*</code> 请求头模板。
+              APIKEY 模式可把 token 参数替换为本次生成的 Key；OAuth 模式请先访问上面的授权链接拿到 token。
+            </p>
+            <div className="flex gap-2">
+              <Input
+                value={
+                  publicOrigin
+                    ? `${publicOrigin}/api/admin/skills/direct?mode=${skillsAuthMode}&ai=<unique-ai-id>&token=...`
+                    : `/api/admin/skills/direct?mode=${skillsAuthMode}&ai=<unique-ai-id>&token=...`
+                }
+                readOnly
+                className="font-mono text-xs"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() =>
+                  void copyPlainText(
+                    publicOrigin
+                      ? `${publicOrigin}/api/admin/skills/direct?mode=${skillsAuthMode}&ai=<unique-ai-id>&token=...`
+                      : `/api/admin/skills/direct?mode=${skillsAuthMode}&ai=<unique-ai-id>&token=...`,
+                    '已复制 Skills 直连链接',
+                  )
+                }
+              >
+                一键复制
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
       <div className="rounded-lg border border-border/60 bg-muted/10 p-4 space-y-4">
         <div className="flex items-center justify-between gap-3">
           <Label htmlFor="hitokoto-home-note" className="font-normal cursor-pointer">
@@ -1562,83 +1763,7 @@ export function WebSettings() {
             <span className="text-sm">隐藏浮动光斑（更干净的静态渐变背景）</span>
           </Label>
 
-          <div className="mt-2 space-y-3 rounded-lg border border-border/60 bg-background/40 px-4 py-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <Label className="font-normal">MCP：主题工具</Label>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  给 AI 工具调用的主题接口。默认关闭；
-                </p>
-              </div>
-              <Switch
-                checked={mcpThemeToolsEnabled}
-                onCheckedChange={(v) => setMcpThemeToolsEnabled(Boolean(v))}
-                className="shrink-0"
-              />
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
-              <div className="space-y-1">
-                <Label>工具 Key（后端生成）</Label>
-                <p className="text-xs text-muted-foreground">
-                  当前状态：{mcpThemeToolsKeyConfigured ? '已配置' : '未配置'}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center justify-end gap-2 self-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 whitespace-nowrap"
-                  disabled={mcpSaving}
-                  onClick={() => void saveMcpThemeTools(mcpThemeToolsEnabled, { rotateKey: true })}
-                >
-                  {mcpSaving ? '处理中…' : '生成 / 轮换 Key'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 whitespace-nowrap"
-                  disabled={mcpSaving}
-                  onClick={() => void saveMcpThemeTools(mcpThemeToolsEnabled)}
-                >
-                  {mcpSaving ? '保存中…' : '保存开关'}
-                </Button>
-              </div>
-              {mcpThemeToolsGeneratedKey ? (
-                <div className="space-y-1 sm:col-span-2">
-                  <Label>本次生成的 Key（请立即复制）</Label>
-                  <Input value={mcpThemeToolsGeneratedKey} readOnly className="font-mono text-xs" />
-                  <p className="text-[11px] text-muted-foreground">
-                    仅本次显示明文，请复制后妥善保存；后端只存 hash。
-                  </p>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 px-3 py-3">
-              <Label className="text-xs">MCP Endpoint（Streamable HTTP）</Label>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                先保存上面的设置，再把下方地址与 API Key 填入 LobeChat 等工具的 MCP 插件配置中。
-              </p>
-              <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">Endpoint URL</p>
-                <Input value={mcpEndpointUrl} readOnly className="font-mono text-xs" />
-              </div>
-              {mcpKeyPreview && (
-                <div className="space-y-1">
-                  <p className="text-[11px] text-muted-foreground">API Key（Bearer Token）</p>
-                  <Input value={mcpKeyPreview} readOnly className="font-mono text-xs" />
-                </div>
-              )}
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                认证方式：<code className="rounded bg-muted px-1">Authorization: Bearer &lt;API Key&gt;</code>；
-                提供工具：<code className="rounded bg-muted px-1">read_custom_surface</code>（读取全部字段与生成 CSS）、
-                <code className="rounded bg-muted px-1">write_custom_surface</code>（按字段 patch 写入，只传要改的字段）。
-              </p>
-            </div>
-          </div>
+          {/* MCP 主题工具已移除：改为 Skills 调试通道 */}
         </div>
       ) : null}
 
@@ -2654,23 +2779,6 @@ export function WebSettings() {
           </div>
         </DialogContent>
       </Dialog>
-
-      <div className="space-y-2">
-        <Label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={form.pageLockEnabled}
-            onChange={(e) => patch('pageLockEnabled', e.target.checked)}
-          />
-          启用页面访问密码锁
-        </Label>
-        <Input
-          type="password"
-          placeholder="设置/更新页面访问密码（留空则不修改）"
-          value={form.pageLockPassword}
-          onChange={(e) => patch('pageLockPassword', e.target.value)}
-        />
-      </div>
 
       <div className="rounded-lg border border-border/60 bg-muted/10 p-4 space-y-4">
         <div className="flex items-center justify-between gap-3">

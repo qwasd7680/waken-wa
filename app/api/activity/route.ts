@@ -29,6 +29,7 @@ import { isLockAppReporterProcessName } from '@/lib/lockapp-reporter'
 import { buildDeviceApprovalUrl } from '@/lib/public-request-url'
 import { removeRealtimeActivity, upsertRealtimeActivity } from '@/lib/realtime-activity-cache'
 import { getSiteConfigMemoryFirst } from '@/lib/site-config-cache'
+import { toDbJsonValue } from '@/lib/sqlite-json'
 import { parseProcessStaleSeconds } from '@/lib/site-config-constants'
 import { sqlDate, sqlTimestamp } from '@/lib/sql-timestamp'
 
@@ -303,7 +304,7 @@ export async function POST(request: NextRequest) {
           generatedHashKey,
           processName: process_name,
           processTitle: process_title,
-          metadata: finalMetadata,
+          metadata: toDbJsonValue(finalMetadata),
           expiresAt: expiresAtVal,
           updatedAt: now,
         })
@@ -312,7 +313,7 @@ export async function POST(request: NextRequest) {
           set: {
             generatedHashKey,
             processTitle: process_title,
-            metadata: finalMetadata,
+            metadata: toDbJsonValue(finalMetadata),
             expiresAt: expiresAtVal,
             updatedAt: now,
           },
