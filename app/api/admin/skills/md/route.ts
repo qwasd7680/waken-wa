@@ -14,7 +14,7 @@ export async function GET() {
   const lines: string[] = []
 
   lines.push('---')
-  lines.push('name: waken-admin-debug')
+  lines.push('name: waken-wa-agent-skills')
   lines.push('description: >-')
   lines.push('  Assists with site debugging and configuration changes for Waken personal site.')
   lines.push('  Use when the user asks to modify site settings, adjust theme or branding,')
