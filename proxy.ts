@@ -9,6 +9,7 @@ const RATE_LIMITED_PATHS = new Set([
   '/api/auth/login',
   '/api/site/unlock',
   '/api/admin/change-password',
+  '/api/health',
 ])
 
 const ADMIN_API_PREFIX = '/api/admin/'

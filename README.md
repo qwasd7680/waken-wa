@@ -137,6 +137,15 @@ chmod +x deploy-build-from-source.sh   # Unix 首次需要
 
 若仅本地开发而非容器，见上文「快速开始」中的 `pnpm dev` / `pnpm build`。
 
+### 三星手表健康数据
+
+- 上传接口：`POST /api/health`（Bearer API Token）
+- 展示接口：`GET /api/health?public=1`
+- 首页展示：`三星手表健康摘要` 卡片
+- 样例脚本：`pnpm health:upload:sample`
+
+详细字段说明见 [`docs/samsung-health.md`](docs/samsung-health.md)。
+
 #### 在 Windows 下 部署
 
 你需要的:

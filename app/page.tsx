@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { ActivityFeedProvider } from '@/components/activity-feed-provider'
 import { ContentReadingPanel } from '@/components/content-reading-panel'
 import { CurrentStatus } from '@/components/current-status'
+import { HealthSummaryCard } from '@/components/health-summary-card'
 import { HomeScrollbarHider } from '@/components/home-scrollbar-hider'
 import { InspirationHomeSection } from '@/components/inspiration-home-section'
 import { LayoutFooterPortal } from '@/components/layout-footer-portal'
@@ -16,6 +17,7 @@ import { verifySiteLockSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { inspirationEntries } from '@/lib/drizzle-schema'
 import { getHCaptchaPublicConfig } from '@/lib/hcaptcha'
+import { getLatestHealthSummary } from '@/lib/health-data'
 import {
   normalizeHitokotoCategories,
   normalizeHitokotoEncode,
@@ -66,7 +68,7 @@ export default async function Home() {
   // Config object for later use
   const cfg = config as Record<string, unknown>
 
-  const [inspirationRows, [countRow]] = await Promise.all([
+  const [inspirationRows, [countRow], healthSummary] = await Promise.all([
     db
       .select({
         id: inspirationEntries.id,
@@ -81,6 +83,7 @@ export default async function Home() {
       .orderBy(desc(inspirationEntries.createdAt))
       .limit(3),
     db.select({ c: count() }).from(inspirationEntries),
+    getLatestHealthSummary(),
   ])
   const inspirationTotal = Number(countRow?.c ?? 0)
   
@@ -189,6 +192,7 @@ export default async function Home() {
                   </h2>
                   <div className="space-y-3">
                     <CurrentStatus hideActivityMedia={hideActivityMedia} />
+                    <HealthSummaryCard summary={healthSummary} />
                   </div>
                 </section>
               </div>

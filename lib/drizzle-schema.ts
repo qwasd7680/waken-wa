@@ -17,5 +17,6 @@ export const skillsOauthTokens = usePg ? pg.skillsOauthTokens : sqlite.skillsOau
 export const rateLimitBackups = usePg ? pg.rateLimitBackups : sqlite.rateLimitBackups
 export const inspirationEntries = usePg ? pg.inspirationEntries : sqlite.inspirationEntries
 export const inspirationAssets = usePg ? pg.inspirationAssets : sqlite.inspirationAssets
+export const healthSamples = usePg ? pg.healthSamples : sqlite.healthSamples
 
 export const appSchema = usePg ? pg.pgSchema : sqlite.sqliteSchema

@@ -278,6 +278,35 @@ export const inspirationAssets = sqliteTable(
   (t) => [index('inspiration_assets_inspiration_entry_id_idx').on(t.inspirationEntryId)],
 )
 
+export const healthSamples = sqliteTable(
+  'health_samples',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    deviceId: integer('device_id')
+      .notNull()
+      .references(() => devices.id, { onDelete: 'cascade' }),
+    generatedHashKey: text('generated_hash_key').notNull(),
+    sampleKey: text('sample_key'),
+    source: text('source').notNull().default('samsung_health'),
+    measuredAt: textCol('measured_at', { mode: 'timestamp' }).notNull(),
+    heartRate: integer('heart_rate'),
+    restingHeartRate: integer('resting_heart_rate'),
+    bloodOxygen: integer('blood_oxygen'),
+    stepCount: integer('step_count'),
+    distanceMeters: integer('distance_meters'),
+    caloriesKcal: integer('calories_kcal'),
+    sleepMinutes: integer('sleep_minutes'),
+    stressLevel: integer('stress_level'),
+    payload: text('payload', { mode: 'json' }),
+    createdAt: ts('created_at'),
+  },
+  (t) => [
+    index('health_samples_device_id_idx').on(t.deviceId),
+    index('health_samples_measured_at_idx').on(t.measuredAt),
+    uniqueIndex('health_samples_generated_key_sample_key').on(t.generatedHashKey, t.sampleKey),
+  ],
+)
+
 export const sqliteSchema = {
   adminUsers,
   apiTokens,
@@ -290,4 +319,5 @@ export const sqliteSchema = {
   rateLimitBackups,
   inspirationEntries,
   inspirationAssets,
+  healthSamples,
 }

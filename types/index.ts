@@ -21,6 +21,7 @@ export type {
 } from './components'
 export type { AdminUser, ApiToken } from './db'
 export type { HCaptchaConfig } from './hcaptcha'
+export type { HealthSummary, HealthSummaryLatest } from './health-model'
 export type { HitokotoJsonBody, UserNoteHitokotoEncode } from './hitokoto'
 export type { InspirationTokenGateResult } from './inspiration'
 export type {

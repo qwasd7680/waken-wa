@@ -5,10 +5,10 @@ import { z } from 'zod'
 
 import { db } from '@/lib/db'
 import { devices, healthSamples } from '@/lib/drizzle-schema'
-import { toDbJsonValue } from '@/lib/sqlite-json'
 import { sqlDate, sqlTimestamp } from '@/lib/sql-timestamp'
+import { toDbJsonValue } from '@/lib/sqlite-json'
 import { coerceDbTimestampToIsoUtc } from '@/lib/timezone'
-import type { HealthSummary } from '@/types/health'
+import type { HealthSummary } from '@/types/health-model'
 
 const HEALTH_PAYLOAD_MAX_JSON_LENGTH = 8_000
 
@@ -129,14 +129,16 @@ export async function getLatestHealthSummary(): Promise<HealthSummary | null> {
     .from(healthSamples)
     .where(gte(healthSamples.measuredAt, sqlDate(cutoff)))
 
-  const totals24h = rows.reduce(
-    (acc, row) => ({
-      stepCount: acc.stepCount + (row.stepCount ?? 0),
-      caloriesKcal: acc.caloriesKcal + (row.caloriesKcal ?? 0),
-      sleepMinutes: acc.sleepMinutes + (row.sleepMinutes ?? 0),
-    }),
-    { stepCount: 0, caloriesKcal: 0, sleepMinutes: 0 },
-  )
+  const totals24h: HealthSummary['totals24h'] = {
+    stepCount: 0,
+    caloriesKcal: 0,
+    sleepMinutes: 0,
+  }
+  for (const row of rows as Array<{ stepCount: number | null; caloriesKcal: number | null; sleepMinutes: number | null }>) {
+    totals24h.stepCount += row.stepCount ?? 0
+    totals24h.caloriesKcal += row.caloriesKcal ?? 0
+    totals24h.sleepMinutes += row.sleepMinutes ?? 0
+  }
 
   return {
     deviceName: latest.deviceName,
@@ -155,4 +157,8 @@ export async function getLatestHealthSummary(): Promise<HealthSummary | null> {
     totals24h,
   }
 }
+
+
+
+
 

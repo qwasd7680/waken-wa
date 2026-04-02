@@ -266,6 +266,39 @@ export const inspirationAssets = pgTable(
   (t) => [index('inspiration_assets_inspiration_entry_id_idx').on(t.inspirationEntryId)],
 )
 
+export const healthSamples = pgTable(
+  'health_samples',
+  {
+    id: serial('id').primaryKey(),
+    deviceId: integer('device_id')
+      .notNull()
+      .references(() => devices.id, { onDelete: 'cascade' }),
+    generatedHashKey: varchar('generated_hash_key', { length: 128 }).notNull(),
+    sampleKey: varchar('sample_key', { length: 120 }),
+    source: varchar('source', { length: 40 }).notNull().default('samsung_health'),
+    measuredAt: timestamp('measured_at', { mode: 'date', withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    heartRate: integer('heart_rate'),
+    restingHeartRate: integer('resting_heart_rate'),
+    bloodOxygen: integer('blood_oxygen'),
+    stepCount: integer('step_count'),
+    distanceMeters: integer('distance_meters'),
+    caloriesKcal: integer('calories_kcal'),
+    sleepMinutes: integer('sleep_minutes'),
+    stressLevel: integer('stress_level'),
+    payload: jsonb('payload'),
+    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index('health_samples_device_id_idx').on(t.deviceId),
+    index('health_samples_measured_at_idx').on(t.measuredAt),
+    uniqueIndex('health_samples_generated_key_sample_key').on(t.generatedHashKey, t.sampleKey),
+  ],
+)
+
 export const pgSchema = {
   adminUsers,
   apiTokens,
@@ -278,4 +311,5 @@ export const pgSchema = {
   rateLimitBackups,
   inspirationEntries,
   inspirationAssets,
+  healthSamples,
 }

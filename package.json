@@ -10,7 +10,8 @@
     "postinstall": "node scripts/init-db.mjs",
     "db:push": "node scripts/drizzle-push-by-env.mjs",
     "db:push:postgres": "node scripts/drizzle-push-by-env.mjs --postgres",
-    "db:init": "node scripts/init-db.mjs"
+    "db:init": "node scripts/init-db.mjs",
+    "health:upload:sample": "node scripts/test-health-upload.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",

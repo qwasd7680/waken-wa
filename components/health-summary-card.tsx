@@ -1,6 +1,7 @@
 import { Activity, Droplets, Flame, Footprints, Moon, ShieldCheck } from 'lucide-react'
+import type { ReactNode } from 'react'
 
-import type { HealthSummary } from '@/types/health'
+import type { HealthSummary } from '@/types/health-model'
 
 interface HealthSummaryCardProps {
   summary: HealthSummary | null
@@ -24,7 +25,7 @@ function Item({
   label,
   value,
 }: {
-  icon: React.ReactNode
+  icon: ReactNode
   label: string
   value: string
 }) {
@@ -94,4 +95,7 @@ export function HealthSummaryCard({ summary }: HealthSummaryCardProps) {
     </section>
   )
 }
+
+
+
 
